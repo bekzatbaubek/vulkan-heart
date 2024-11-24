@@ -1,12 +1,10 @@
+#include <cmath>
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
-#define GLM_FORCE_RADIANS
 #include <chrono>
 #include <cstdint>
 #include <fstream>
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
 #include <iostream>
 #include <optional>
 #include <set>
@@ -70,15 +68,121 @@ bool enableValidationLayers = false;
 bool enableValidationLayers = true;
 #endif
 
-struct Vertex {
-    glm::vec2 pos;
-    glm::vec3 color;
+struct vec2 {
+    float x, y;
+};
+struct vec3 {
+    float x, y, z;
 };
 
+vec3 normalize(const vec3 &v) {
+    float length = sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+    return {v.x / length, v.y / length, v.z / length};
+}
+
+vec3 cross(const vec3 &a, const vec3 &b) {
+    return {a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z,
+            a.x * b.y - a.y * b.x};
+}
+
+float dot(const vec3 &a, const vec3 &b) {
+    return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
+vec3 operator-(const vec3 &a, const vec3 &b) {
+    return {a.x - b.x, a.y - b.y, a.z - b.z};
+}
+
+struct Vertex {
+    vec2 pos;
+    vec3 color;
+};
+
+struct mat4 {
+    float data[4][4] = {0};
+};
+
+mat4 identity() {
+    mat4 result;
+    for (int i = 0; i < 4; ++i) {
+        result.data[i][i] = 1.0f;
+    }
+    return result;
+}
+
+mat4 rotate(float angle, const vec3 &axis) {
+    mat4 result = identity();
+    float c = cos(angle);
+    float s = sin(angle);
+    float t = 1.0f - c;
+
+    result.data[0][0] = t * axis.x * axis.x + c;
+    result.data[0][1] = t * axis.x * axis.y - s * axis.z;
+    result.data[0][2] = t * axis.x * axis.z + s * axis.y;
+
+    result.data[1][0] = t * axis.x * axis.y + s * axis.z;
+    result.data[1][1] = t * axis.y * axis.y + c;
+    result.data[1][2] = t * axis.y * axis.z - s * axis.x;
+
+    result.data[2][0] = t * axis.x * axis.z - s * axis.y;
+    result.data[2][1] = t * axis.y * axis.z + s * axis.x;
+    result.data[2][2] = t * axis.z * axis.z + c;
+
+    return result;
+}
+
+mat4 multiply(const mat4 &a, const mat4 &b) {
+    mat4 result = {};
+    for (int i = 0; i < 4; ++i) {
+        for (int j = 0; j < 4; ++j) {
+            result.data[i][j] =
+                a.data[i][0] * b.data[0][j] + a.data[i][1] * b.data[1][j] +
+                a.data[i][2] * b.data[2][j] + a.data[i][3] * b.data[3][j];
+        }
+    }
+    return result;
+}
+
+mat4 lookAt(const vec3 &eye, const vec3 &center, const vec3 &up) {
+    vec3 f = normalize(center - eye);
+    vec3 s = normalize(cross(f, up));
+    vec3 u = cross(s, f);
+
+    mat4 result = identity();
+    result.data[0][0] = s.x;
+    result.data[0][1] = u.x;
+    result.data[0][2] = -f.x;
+    result.data[1][0] = s.y;
+    result.data[1][1] = u.y;
+    result.data[1][2] = -f.y;
+    result.data[2][0] = s.z;
+    result.data[2][1] = u.z;
+    result.data[2][2] = -f.z;
+    result.data[3][0] = -dot(s, eye);
+    result.data[3][1] = -dot(u, eye);
+    result.data[3][2] = dot(f, eye);
+    return result;
+}
+
+mat4 perspective(float fov, float aspect, float near, float far) {
+    mat4 result = identity();
+
+    float tanHalfFov = tan(fov / 2.0f);
+
+    result.data[0][0] = 1.0f / (aspect * tanHalfFov);
+    result.data[1][1] = 1.0f / tanHalfFov;
+    result.data[2][2] = -(far + near) / (far - near);
+    result.data[2][3] = -1.0f;
+    result.data[3][2] = -(2.0f * far * near) / (far - near);
+    result.data[3][3] = 0.0f;
+
+    return result;
+}
+
 struct UniformBufferObject {
-    glm::mat4 model;
-    glm::mat4 view;
-    glm::mat4 proj;
+    mat4 model;
+    mat4 view;
+    mat4 proj;
 };
 
 void LOG(const char *msg) {
@@ -654,6 +758,8 @@ void recreateSwapChain() {
     CreateVKFramebuffers();
 }
 
+struct Camera {};
+
 void updateUniformBuffer(uint32_t currentImage) {
     static auto startTime = std::chrono::high_resolution_clock::now();
 
@@ -665,15 +771,18 @@ void updateUniformBuffer(uint32_t currentImage) {
 
     UniformBufferObject ubo{};
 
-    ubo.model = glm::rotate(glm::mat4(1.0f), deltaTime * glm::radians(90.0f),
-                            glm::vec3(0.0f, 0.0f, 1.0f));
+    ubo.model = rotate(deltaTime * 45.0f * (3.14159265358979323846f / 180.0f),
+                       {0.0, 0.0, 1.0});
+    // ubo.model = identity();
+
     ubo.view =
-        glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f),
-                    glm::vec3(0.0f, 0.0f, 1.0f));
-    ubo.proj = glm::perspective(
-        glm::radians(45.0f),
-        swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 10.0f);
-    ubo.proj[1][1] *= -1;
+        lookAt({2.0f, 2.0f, 2.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f});
+
+    ubo.proj = perspective(
+        M_PI / 4, swapChainExtent.width / (float)swapChainExtent.height, 0.1f,
+        10.0f);
+
+    ubo.proj.data[1][1] *= -1;
 
     memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
 }
@@ -1113,9 +1222,8 @@ void CreateVKGraphicsPipeline() {
 
     rasterizer.lineWidth = 1.0f;
 
-    rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
+    // rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
     rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-
 
     rasterizer.depthBiasEnable = VK_FALSE;
 
