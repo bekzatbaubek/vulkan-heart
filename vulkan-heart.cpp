@@ -773,7 +773,6 @@ void updateUniformBuffer(uint32_t currentImage) {
 
     ubo.model = rotate(deltaTime * 45.0f * (3.14159265358979323846f / 180.0f),
                        {0.0, 0.0, 1.0});
-    // ubo.model = identity();
 
     ubo.view =
         lookAt({2.0f, 2.0f, 2.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f});
@@ -1401,12 +1400,36 @@ int main(int argc, char **argv) {
     window = glfwCreateWindow(800, 600, "Vulkan window", 0, 0);
     glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
 
-    std::vector<Vertex> vertices = {{{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-                                    {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
-                                    {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
-                                    {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}};
+    // std::vector<Vertex> vertices = {{{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+    //                                 {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
+    //                                 {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
+    //                                 {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}};
 
-    std::vector<uint16_t> indices = {0, 1, 2, 2, 3, 0};
+    // std::vector<uint16_t> indices = {0, 1, 2, 2, 3, 0};
+
+
+    const int numSegments = 100;
+    const float pi = 3.14159265358979323846f;
+
+    std::vector<Vertex> vertices;
+    vertices.reserve(numSegments + 1);
+    std::vector<uint16_t> indices;
+    indices.reserve(numSegments * 3);
+
+    // Generate vertices
+    for (int i = 0; i <= numSegments; ++i) {
+        float t = i * 2 * pi / numSegments;
+        float x = 16 * std::pow(std::sin(t), 3);
+        float y = 13 * std::cos(t) - 5 * std::cos(2 * t) - 2 * std::cos(3 * t) - std::cos(4 * t);
+        vertices.push_back({{x / 16.0f, y / 16.0f}, {1.0f, 0.0f, 0.0f}});
+    }
+
+    // Generate indices
+    for (int i = 1; i < numSegments - 1; ++i) {
+        indices.push_back(0);
+        indices.push_back(i);
+        indices.push_back(i + 1);
+    }
 
     CreateVKInstance();
     CreateVKDebugMessenger();
