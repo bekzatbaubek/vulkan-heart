@@ -10,9 +10,6 @@
 #include <stdexcept>
 #include <vector>
 
-#define WIDTH 800
-#define HEIGHT 600
-
 #define MAX_FRAMES_IN_FLIGHT 2
 
 GLFWwindow *window;
@@ -34,6 +31,9 @@ VkRenderPass renderPass;
 VkPipeline graphicsPipeline;
 std::vector<VkFramebuffer> swapChainFramebuffers;
 VkCommandPool commandPool;
+
+VkBuffer vertexBuffer;
+VkDeviceMemory vertexBufferMemory;
 
 std::vector<VkCommandBuffer> commandBuffers;
 std::vector<VkSemaphore> imageAvailableSemaphores;
@@ -57,7 +57,20 @@ bool enableValidationLayers = false;
 bool enableValidationLayers = true;
 #endif
 
-void LOG(const char * msg){
+struct vec2 {
+    float x, y;
+};
+
+struct vec3 {
+    float x, y, z;
+};
+
+struct Vertex {
+    vec2 pos;
+    vec3 color;
+};
+
+void LOG(const char *msg) {
     auto ts = std::chrono::system_clock::now();
     std::cerr << ts << " " << msg << '\n';
 }
@@ -137,7 +150,8 @@ bool checkValidationLayerSupport() {
     return true;
 }
 
-void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
+void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex,
+                         const std::vector<Vertex> &vertices) {
     VkCommandBufferBeginInfo beginInfo{};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 
@@ -177,7 +191,12 @@ void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
     scissor.extent = swapChainExtent;
     vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-    vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+    VkBuffer vertexBuffers[] = {vertexBuffer};
+    VkDeviceSize offsets[] = {0};
+    vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
+
+    vkCmdDraw(commandBuffer, (uint32_t)(vertices.size()), 1, 0, 0);
+
     vkCmdEndRenderPass(commandBuffer);
 
     if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
@@ -564,7 +583,7 @@ void recreateSwapChain() {
     CreateVKFramebuffers();
 }
 
-void drawFrame() {
+void drawFrame(const std::vector<Vertex> &vertices) {
     static uint32_t currentFrame = 0;
     vkWaitForFences(device, 1, &inFlightFences[currentFrame], VK_TRUE,
                     UINT64_MAX);
@@ -587,7 +606,7 @@ void drawFrame() {
 
     vkResetCommandBuffer(commandBuffers[currentFrame], 0);
 
-    recordCommandBuffer(commandBuffers[currentFrame], imageIndex);
+    recordCommandBuffer(commandBuffers[currentFrame], imageIndex, vertices);
 
     VkSubmitInfo submitInfo{};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -721,6 +740,83 @@ void CreateVKLogicalDevice() {
     vkGetDeviceQueue(device, indices.presentFamily.value(), 0, &presentQueue);
 }
 
+static VkVertexInputBindingDescription getBindingDescription() {
+    VkVertexInputBindingDescription bindingDescription{};
+    bindingDescription.binding = 0;
+    bindingDescription.stride = sizeof(Vertex);
+    bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+    return bindingDescription;
+}
+
+static std::array<VkVertexInputAttributeDescription, 2>
+getAttributeDescriptions() {
+    std::array<VkVertexInputAttributeDescription, 2> attributeDescriptions{};
+    attributeDescriptions[0].binding = 0;
+    attributeDescriptions[0].location = 0;
+    attributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
+    attributeDescriptions[0].offset = offsetof(Vertex, pos);
+
+    attributeDescriptions[1].binding = 0;
+    attributeDescriptions[1].location = 1;
+    attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+    attributeDescriptions[1].offset = offsetof(Vertex, color);
+
+    return attributeDescriptions;
+}
+
+uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) {
+    VkPhysicalDeviceMemoryProperties memProperties;
+    vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);
+
+    for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
+        if ((typeFilter & (1 << i)) &&
+            (memProperties.memoryTypes[i].propertyFlags & properties) ==
+                properties) {
+            return i;
+        }
+    }
+
+    throw std::runtime_error("failed to find suitable memory type!");
+}
+
+void CreateVKVertexBuffer(const std::vector<Vertex> &vertices) {
+    VkBufferCreateInfo bufferInfo{};
+    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferInfo.size = sizeof(vertices[0]) * vertices.size();
+
+    bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+
+    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+    if (vkCreateBuffer(device, &bufferInfo, nullptr, &vertexBuffer) !=
+        VK_SUCCESS) {
+        throw std::runtime_error("failed to create vertex buffer!");
+    }
+    VkMemoryRequirements memRequirements;
+    vkGetBufferMemoryRequirements(device, vertexBuffer, &memRequirements);
+
+    VkMemoryAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocInfo.allocationSize = memRequirements.size;
+    allocInfo.memoryTypeIndex =
+        findMemoryType(memRequirements.memoryTypeBits,
+                       VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                           VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+    if (vkAllocateMemory(device, &allocInfo, nullptr, &vertexBufferMemory) !=
+        VK_SUCCESS) {
+        throw std::runtime_error("failed to allocate vertex buffer memory!");
+    }
+
+    vkBindBufferMemory(device, vertexBuffer, vertexBufferMemory, 0);
+
+    void *data;
+    vkMapMemory(device, vertexBufferMemory, 0, bufferInfo.size, 0, &data);
+    memcpy(data, vertices.data(), (size_t)bufferInfo.size);
+    vkUnmapMemory(device, vertexBufferMemory);
+}
+
 void CreateVKGraphicsPipeline() {
     auto vertShaderCode = readFile("shaders/heart.vert.spv");
     auto fragShaderCode = readFile("shaders/heart.frag.spv");
@@ -757,8 +853,15 @@ void CreateVKGraphicsPipeline() {
     VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
     vertexInputInfo.sType =
         VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-    vertexInputInfo.vertexBindingDescriptionCount = 0;
-    vertexInputInfo.vertexAttributeDescriptionCount = 0;
+
+    auto bindingDescription = getBindingDescription();
+    auto attributeDescriptions = getAttributeDescriptions();
+
+    vertexInputInfo.vertexBindingDescriptionCount = 1;
+    vertexInputInfo.vertexAttributeDescriptionCount =
+        static_cast<uint32_t>(attributeDescriptions.size());
+    vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
+    vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
 
     VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
     inputAssembly.sType =
@@ -959,20 +1062,27 @@ void framebufferResizeCallback(GLFWwindow *window, int width, int height) {
     framebufferResized = true;
 }
 
+void CreateVKSurface() {
+    if (glfwCreateWindowSurface(instance, window, 0, &surface) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create window surface!");
+    }
+}
+
 int main(int argc, char **argv) {
     glfwInit();
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 
-    window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan window", 0, 0);
+    window = glfwCreateWindow(800, 600, "Vulkan window", 0, 0);
     glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
+
+    std::vector<Vertex> vertices = {{{0.0f, -0.5f}, {0.0f, 0.0f, 0.0f}},
+                                    {{0.5f, 0.5f}, {0.0f, 0.8f, 0.0f}},
+                                    {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}};
 
     CreateVKInstance();
     CreateVKDebugMessenger();
-
-    if (glfwCreateWindowSurface(instance, window, 0, &surface) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create window surface!");
-    }
+    CreateVKSurface();
 
     EnumerateVKExtensions();
     PickVKPhysicalDevice();
@@ -982,25 +1092,13 @@ int main(int argc, char **argv) {
     CreateVKGraphicsPipeline();
     CreateVKFramebuffers();
     CreateVKCommandPool();
+    CreateVKVertexBuffer(vertices);
     AllocateVKCommandBuffers();
     CreateVKSyncPrimitives();
 
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
-        // Process input
-
-        std::chrono::high_resolution_clock::time_point start =
-            std::chrono::high_resolution_clock::now();
-
-        // Render frame
-        drawFrame();
-        std::chrono::high_resolution_clock::time_point end =
-            std::chrono::high_resolution_clock::now();
-        // std::cout << "Frame time: "
-        //           << std::chrono::duration_cast<std::chrono::microseconds>(
-        //                  end - start)
-        //                  .count()
-        //           << "µs" << std::endl;
+        drawFrame(vertices);
     }
 
     return 0;
