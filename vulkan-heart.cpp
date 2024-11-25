@@ -1,8 +1,8 @@
-#include <cmath>
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <fstream>
 #include <iostream>
@@ -87,6 +87,18 @@ vec3 cross(const vec3 &a, const vec3 &b) {
 
 float dot(const vec3 &a, const vec3 &b) {
     return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
+vec3 operator*(const vec3 &v, float scalar) {
+    return {v.x * scalar, v.y * scalar, v.z * scalar};
+}
+
+vec3 operator*(float scalar, const vec3 &v) {
+    return {v.x * scalar, v.y * scalar, v.z * scalar};
+}
+
+vec3 operator+(const vec3 &a, const vec3 &b) {
+    return {a.x + b.x, a.y + b.y, a.z + b.z};
 }
 
 vec3 operator-(const vec3 &a, const vec3 &b) {
@@ -183,6 +195,34 @@ struct UniformBufferObject {
     mat4 model;
     mat4 view;
     mat4 proj;
+};
+
+struct Camera {
+    vec3 position;
+    vec3 direction;
+    vec3 up;
+    float fov;
+    float aspectRatio;
+    float nearPlane;
+    float farPlane;
+
+    Camera(vec3 pos, vec3 dir, vec3 upDir, float fieldOfView, float aspect,
+           float near, float far)
+        : position(pos),
+          direction(normalize(dir)),
+          up(normalize(upDir)),
+          fov(fieldOfView),
+          aspectRatio(aspect),
+          nearPlane(near),
+          farPlane(far) {}
+
+    mat4 getViewMatrix() const {
+        return lookAt(position, position + direction, up);
+    }
+
+    mat4 getProjectionMatrix() const {
+        return perspective(fov, aspectRatio, nearPlane, farPlane);
+    }
 };
 
 void LOG(const char *msg) {
@@ -316,8 +356,7 @@ void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex,
                             pipelineLayout, 0, 1, &descriptorSets[currentFrame],
                             0, nullptr);
 
-    vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(indices.size()), 1, 0,
-                     0, 0);
+    vkCmdDrawIndexed(commandBuffer, (uint32_t)(indices.size()), 1, 0, 0, 0);
 
     vkCmdEndRenderPass(commandBuffer);
 
@@ -758,9 +797,7 @@ void recreateSwapChain() {
     CreateVKFramebuffers();
 }
 
-struct Camera {};
-
-void updateUniformBuffer(uint32_t currentImage) {
+void updateUniformBuffer(uint32_t currentImage, Camera &cam) {
     static auto startTime = std::chrono::high_resolution_clock::now();
 
     auto currentTime = std::chrono::high_resolution_clock::now();
@@ -771,23 +808,25 @@ void updateUniformBuffer(uint32_t currentImage) {
 
     UniformBufferObject ubo{};
 
-    ubo.model = rotate(deltaTime * 45.0f * (3.14159265358979323846f / 180.0f),
-                       {0.0, 0.0, 1.0});
+    ubo.model =
+        rotate(deltaTime * 45.0f * (3.14159265358979323846f / 180.0f), {0.0, 0.0, 1.0});
 
-    ubo.view =
-        lookAt({2.0f, 2.0f, 2.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f});
+    // ubo.view =
+    //     lookAt({2.0f, 2.0f, 2.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f});
 
-    ubo.proj = perspective(
-        M_PI / 4, swapChainExtent.width / (float)swapChainExtent.height, 0.1f,
-        10.0f);
+    // ubo.proj = perspective(
+    //     M_PI / 4, swapChainExtent.width / (float)swapChainExtent.height,
+    //     0.1f, 10.0f);
 
+    ubo.view = cam.getViewMatrix();
+    ubo.proj = cam.getProjectionMatrix();
     ubo.proj.data[1][1] *= -1;
 
     memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
 }
 
 void drawFrame(const std::vector<Vertex> &vertices,
-               const std::vector<uint16_t> &indices) {
+               const std::vector<uint16_t> &indices, Camera &camera) {
     static uint32_t currentFrame = 0;
     vkWaitForFences(device, 1, &inFlightFences[currentFrame], VK_TRUE,
                     UINT64_MAX);
@@ -810,7 +849,7 @@ void drawFrame(const std::vector<Vertex> &vertices,
 
     vkResetCommandBuffer(commandBuffers[currentFrame], 0);
 
-    updateUniformBuffer(currentFrame);
+    updateUniformBuffer(currentFrame, camera);
 
     recordCommandBuffer(commandBuffers[currentFrame], imageIndex, vertices,
                         indices, currentFrame);
@@ -1392,6 +1431,50 @@ void CreateVKSurface() {
     }
 }
 
+void processInput(GLFWwindow *window, Camera &camera) {
+    const float cameraSpeed = 0.04f;  // Adjust accordingly
+
+    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
+        camera.position = camera.position + cameraSpeed * camera.direction;
+    }
+    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
+        camera.position = camera.position - cameraSpeed * camera.direction;
+    }
+    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
+        camera.position =
+            camera.position -
+            normalize(cross(camera.direction, camera.up)) * cameraSpeed;
+    }
+    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
+        camera.position =
+            camera.position +
+            normalize(cross(camera.direction, camera.up)) * cameraSpeed;
+    }
+
+    if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS) {
+        camera.direction = camera.direction + cameraSpeed * camera.up;
+    }
+    if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS) {
+        camera.direction = camera.direction - cameraSpeed * camera.up;
+    }
+    if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS) {
+        camera.direction =
+            camera.direction - normalize(cross(camera.direction, camera.up)) *
+                                 cameraSpeed;
+    }
+    if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) {
+        camera.direction =
+            camera.direction + normalize(cross(camera.direction, camera.up)) *
+                                 cameraSpeed;
+    }
+
+    // Reset camera position
+    if (glfwGetKey(window, GLFW_KEY_0) == GLFW_PRESS) {
+        camera.position = {0.0f, 0.0f, 2.0f};
+        camera.direction = {0.0f, 0.0f, -1.0f};
+    }
+}
+
 int main(int argc, char **argv) {
     glfwInit();
 
@@ -1400,13 +1483,23 @@ int main(int argc, char **argv) {
     window = glfwCreateWindow(800, 600, "Vulkan window", 0, 0);
     glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
 
+    Camera camera({0.0f, 0.0f, 2.0f},   // Position
+                  {0.0f, 0.0f, -1.0f},  // Direction
+                  {0.0f, 1.0f, 0.0f},   // Up vector
+                  M_PI / 4,             // Field of view
+                  800.0f / 600.0f,      // Aspect ratio
+                  0.1f,                 // Near plane
+                  10.0f                 // Far plane
+    );
+
+
+
     // std::vector<Vertex> vertices = {{{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
     //                                 {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
     //                                 {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
     //                                 {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}};
 
     // std::vector<uint16_t> indices = {0, 1, 2, 2, 3, 0};
-
 
     const int numSegments = 100;
     const float pi = 3.14159265358979323846f;
@@ -1420,7 +1513,8 @@ int main(int argc, char **argv) {
     for (int i = 0; i <= numSegments; ++i) {
         float t = i * 2 * pi / numSegments;
         float x = 16 * std::pow(std::sin(t), 3);
-        float y = 13 * std::cos(t) - 5 * std::cos(2 * t) - 2 * std::cos(3 * t) - std::cos(4 * t);
+        float y = 13 * std::cos(t) - 5 * std::cos(2 * t) - 2 * std::cos(3 * t) -
+                  std::cos(4 * t);
         vertices.push_back({{x / 16.0f, y / 16.0f}, {1.0f, 0.0f, 0.0f}});
     }
 
@@ -1456,9 +1550,21 @@ int main(int argc, char **argv) {
     AllocateVKCommandBuffers();
     CreateVKSyncPrimitives();
 
+
+
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
-        drawFrame(vertices, indices);
+        processInput(window, camera);
+
+        if (framebufferResized) {
+            // Recalculate aspect ratio
+            int width = 0, height = 0;
+            glfwGetFramebufferSize(window, &width, &height);
+
+            camera.aspectRatio = static_cast<float>(width) / height;
+        }
+
+        drawFrame(vertices, indices, camera);
     }
 
     return 0;
