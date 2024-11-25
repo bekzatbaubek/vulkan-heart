@@ -1,3 +1,4 @@
+#include "vulkan/vulkan_core.h"
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
@@ -106,7 +107,7 @@ vec3 operator-(const vec3 &a, const vec3 &b) {
 }
 
 struct Vertex {
-    vec2 pos;
+    vec3 pos;
     vec3 color;
 };
 
@@ -808,8 +809,10 @@ void updateUniformBuffer(uint32_t currentImage, Camera &cam) {
 
     UniformBufferObject ubo{};
 
-    ubo.model =
-        rotate(deltaTime * 45.0f * (3.14159265358979323846f / 180.0f), {0.0, 0.0, 1.0});
+    float rotationSpeed = 2.0f;
+    ubo.model = rotate(
+        rotationSpeed * deltaTime * 45.0f * (3.14159265358979323846f / 180.0f),
+        {0.0, 0.0, 1.0});
 
     // ubo.view =
     //     lookAt({2.0f, 2.0f, 2.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f});
@@ -1000,7 +1003,7 @@ getAttributeDescriptions() {
     std::array<VkVertexInputAttributeDescription, 2> attributeDescriptions{};
     attributeDescriptions[0].binding = 0;
     attributeDescriptions[0].location = 0;
-    attributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
+    attributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
     attributeDescriptions[0].offset = offsetof(Vertex, pos);
 
     attributeDescriptions[1].binding = 0;
@@ -1459,13 +1462,13 @@ void processInput(GLFWwindow *window, Camera &camera) {
     }
     if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS) {
         camera.direction =
-            camera.direction - normalize(cross(camera.direction, camera.up)) *
-                                 cameraSpeed;
+            camera.direction -
+            normalize(cross(camera.direction, camera.up)) * cameraSpeed;
     }
     if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) {
         camera.direction =
-            camera.direction + normalize(cross(camera.direction, camera.up)) *
-                                 cameraSpeed;
+            camera.direction +
+            normalize(cross(camera.direction, camera.up)) * cameraSpeed;
     }
 
     // Reset camera position
@@ -1492,8 +1495,6 @@ int main(int argc, char **argv) {
                   10.0f                 // Far plane
     );
 
-
-
     // std::vector<Vertex> vertices = {{{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
     //                                 {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
     //                                 {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
@@ -1501,29 +1502,52 @@ int main(int argc, char **argv) {
 
     // std::vector<uint16_t> indices = {0, 1, 2, 2, 3, 0};
 
-    const int numSegments = 100;
-    const float pi = 3.14159265358979323846f;
+    // const int numSegments = 100;
+    // const float pi = 3.14159265358979323846f;
 
-    std::vector<Vertex> vertices;
-    vertices.reserve(numSegments + 1);
-    std::vector<uint16_t> indices;
-    indices.reserve(numSegments * 3);
+    // std::vector<Vertex> vertices;
+    // vertices.reserve(numSegments + 1);
+    // std::vector<uint16_t> indices;
+    // indices.reserve(numSegments * 3);
 
-    // Generate vertices
-    for (int i = 0; i <= numSegments; ++i) {
-        float t = i * 2 * pi / numSegments;
-        float x = 16 * std::pow(std::sin(t), 3);
-        float y = 13 * std::cos(t) - 5 * std::cos(2 * t) - 2 * std::cos(3 * t) -
-                  std::cos(4 * t);
-        vertices.push_back({{x / 16.0f, y / 16.0f}, {1.0f, 0.0f, 0.0f}});
-    }
+    // // Generate vertices
+    // for (int i = 0; i <= numSegments; ++i) {
+    //     float t = i * 2 * pi / numSegments;
+    //     float x = 16 * std::pow(std::sin(t), 3);
+    //     float y = 13 * std::cos(t) - 5 * std::cos(2 * t) - 2 * std::cos(3 *
+    //     t) -
+    //               std::cos(4 * t);
+    //     vertices.push_back({{x / 16.0f, y / 16.0f}, {1.0f, 0.0f, 0.0f}});
+    // }
 
-    // Generate indices
-    for (int i = 1; i < numSegments - 1; ++i) {
-        indices.push_back(0);
-        indices.push_back(i);
-        indices.push_back(i + 1);
-    }
+    // // Generate indices
+    // for (int i = 1; i < numSegments - 1; ++i) {
+    //     indices.push_back(0);
+    //     indices.push_back(i);
+    //     indices.push_back(i + 1);
+    // }
+    //
+
+    std::vector<Vertex> vertices = {
+        {{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},  // 0
+        {{0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},   // 1
+        {{0.5f, 0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}},    // 2
+        {{-0.5f, 0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}},   // 3
+        {{-0.5f, -0.5f, 0.5f}, {1.0f, 1.0f, 0.0f}},   // 4
+        {{0.5f, -0.5f, 0.5f}, {0.0f, 1.0f, 1.0f}},    // 5
+        {{0.5f, 0.5f, 0.5f}, {1.0f, 0.0f, 1.0f}},     // 6
+        {{-0.5f, 0.5f, 0.5f}, {0.0f, 0.0f, 0.0f}}     // 7
+    };
+
+    // Define the indices for the 3D cube
+    std::vector<uint16_t> indices = {
+        0, 1, 2, 2, 3, 0,  // Front face
+        4, 5, 6, 6, 7, 4,  // Back face
+        0, 1, 5, 5, 4, 0,  // Bottom face
+        2, 3, 7, 7, 6, 2,  // Top face
+        0, 3, 7, 7, 4, 0,  // Left face
+        1, 2, 6, 6, 5, 1   // Right face
+    };
 
     CreateVKInstance();
     CreateVKDebugMessenger();
@@ -1549,8 +1573,6 @@ int main(int argc, char **argv) {
 
     AllocateVKCommandBuffers();
     CreateVKSyncPrimitives();
-
-
 
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
