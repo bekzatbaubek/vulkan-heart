@@ -1,9 +1,4 @@
-#include "vulkan/vulkan_core.h"
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
-
 #include <chrono>
-#include <cmath>
 #include <cstdint>
 #include <fstream>
 #include <iostream>
@@ -11,6 +6,12 @@
 #include <set>
 #include <stdexcept>
 #include <vector>
+
+#include "image.cpp"
+#include "math.cpp"
+
+#define GLFW_INCLUDE_VULKAN
+#include <GLFW/glfw3.h>
 
 #define MAX_FRAMES_IN_FLIGHT 2
 
@@ -34,6 +35,16 @@ VkRenderPass renderPass;
 VkPipeline graphicsPipeline;
 std::vector<VkFramebuffer> swapChainFramebuffers;
 VkCommandPool commandPool;
+
+VkBuffer stagingBuffer;
+VkDeviceMemory stagingBufferMemory;
+
+VkImage textureImage;
+VkDeviceMemory textureImageMemory;
+
+VkImage depthImage;
+VkDeviceMemory depthImageMemory;
+VkImageView depthImageView;
 
 VkBuffer vertexBuffer;
 VkDeviceMemory vertexBufferMemory;
@@ -68,129 +79,6 @@ bool enableValidationLayers = false;
 #else
 bool enableValidationLayers = true;
 #endif
-
-struct vec2 {
-    float x, y;
-};
-struct vec3 {
-    float x, y, z;
-};
-
-vec3 normalize(const vec3 &v) {
-    float length = sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
-    return {v.x / length, v.y / length, v.z / length};
-}
-
-vec3 cross(const vec3 &a, const vec3 &b) {
-    return {a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z,
-            a.x * b.y - a.y * b.x};
-}
-
-float dot(const vec3 &a, const vec3 &b) {
-    return a.x * b.x + a.y * b.y + a.z * b.z;
-}
-
-vec3 operator*(const vec3 &v, float scalar) {
-    return {v.x * scalar, v.y * scalar, v.z * scalar};
-}
-
-vec3 operator*(float scalar, const vec3 &v) {
-    return {v.x * scalar, v.y * scalar, v.z * scalar};
-}
-
-vec3 operator+(const vec3 &a, const vec3 &b) {
-    return {a.x + b.x, a.y + b.y, a.z + b.z};
-}
-
-vec3 operator-(const vec3 &a, const vec3 &b) {
-    return {a.x - b.x, a.y - b.y, a.z - b.z};
-}
-
-struct Vertex {
-    vec3 pos;
-    vec3 color;
-};
-
-struct mat4 {
-    float data[4][4] = {0};
-};
-
-mat4 identity() {
-    mat4 result;
-    for (int i = 0; i < 4; ++i) {
-        result.data[i][i] = 1.0f;
-    }
-    return result;
-}
-
-mat4 rotate(float angle, const vec3 &axis) {
-    mat4 result = identity();
-    float c = cos(angle);
-    float s = sin(angle);
-    float t = 1.0f - c;
-
-    result.data[0][0] = t * axis.x * axis.x + c;
-    result.data[0][1] = t * axis.x * axis.y - s * axis.z;
-    result.data[0][2] = t * axis.x * axis.z + s * axis.y;
-
-    result.data[1][0] = t * axis.x * axis.y + s * axis.z;
-    result.data[1][1] = t * axis.y * axis.y + c;
-    result.data[1][2] = t * axis.y * axis.z - s * axis.x;
-
-    result.data[2][0] = t * axis.x * axis.z - s * axis.y;
-    result.data[2][1] = t * axis.y * axis.z + s * axis.x;
-    result.data[2][2] = t * axis.z * axis.z + c;
-
-    return result;
-}
-
-mat4 multiply(const mat4 &a, const mat4 &b) {
-    mat4 result = {};
-    for (int i = 0; i < 4; ++i) {
-        for (int j = 0; j < 4; ++j) {
-            result.data[i][j] =
-                a.data[i][0] * b.data[0][j] + a.data[i][1] * b.data[1][j] +
-                a.data[i][2] * b.data[2][j] + a.data[i][3] * b.data[3][j];
-        }
-    }
-    return result;
-}
-
-mat4 lookAt(const vec3 &eye, const vec3 &center, const vec3 &up) {
-    vec3 f = normalize(center - eye);
-    vec3 s = normalize(cross(f, up));
-    vec3 u = cross(s, f);
-
-    mat4 result = identity();
-    result.data[0][0] = s.x;
-    result.data[0][1] = u.x;
-    result.data[0][2] = -f.x;
-    result.data[1][0] = s.y;
-    result.data[1][1] = u.y;
-    result.data[1][2] = -f.y;
-    result.data[2][0] = s.z;
-    result.data[2][1] = u.z;
-    result.data[2][2] = -f.z;
-    result.data[3][0] = -dot(s, eye);
-    result.data[3][1] = -dot(u, eye);
-    result.data[3][2] = dot(f, eye);
-    return result;
-}
-
-mat4 perspective(float fov, float aspect, float near, float far) {
-    mat4 result = identity();
-
-    float tanHalfFov = tan(fov / 2.0f);
-
-    result.data[0][0] = 1.0f / (aspect * tanHalfFov);
-    result.data[1][1] = 1.0f / tanHalfFov;
-    result.data[2][2] = -(far + near) / (far - near);
-    result.data[2][3] = -1.0f;
-    result.data[3][2] = -(2.0f * far * near) / (far - near);
-    result.data[3][3] = 0.0f;
-
-    return result;
-}
 
 struct UniformBufferObject {
     mat4 model;
@@ -809,7 +697,7 @@ void updateUniformBuffer(uint32_t currentImage, Camera &cam) {
 
     UniformBufferObject ubo{};
 
-    float rotationSpeed = 2.0f;
+    float rotationSpeed = 0.0f;
     ubo.model = rotate(
         rotationSpeed * deltaTime * 45.0f * (3.14159265358979323846f / 180.0f),
         {0.0, 0.0, 1.0});
@@ -1059,7 +947,47 @@ void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage,
     vkBindBufferMemory(device, buffer, bufferMemory, 0);
 }
 
-void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) {
+void createImage(uint32_t width, uint32_t height, VkFormat format,
+                 VkImageTiling tiling, VkImageUsageFlags usage,
+                 VkMemoryPropertyFlags properties, VkImage &image,
+                 VkDeviceMemory &imageMemory) {
+    VkImageCreateInfo imageInfo{};
+    imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    imageInfo.imageType = VK_IMAGE_TYPE_2D;
+    imageInfo.extent.width = width;
+    imageInfo.extent.height = height;
+    imageInfo.extent.depth = 1;
+    imageInfo.mipLevels = 1;
+    imageInfo.arrayLayers = 1;
+    imageInfo.format = format;
+    imageInfo.tiling = tiling;
+    imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    imageInfo.usage = usage;
+    imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+    imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+    if (vkCreateImage(device, &imageInfo, nullptr, &image) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create image!");
+    }
+
+    VkMemoryRequirements memRequirements;
+    vkGetImageMemoryRequirements(device, image, &memRequirements);
+
+    VkMemoryAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocInfo.allocationSize = memRequirements.size;
+    allocInfo.memoryTypeIndex =
+        findMemoryType(memRequirements.memoryTypeBits, properties);
+
+    if (vkAllocateMemory(device, &allocInfo, nullptr, &imageMemory) !=
+        VK_SUCCESS) {
+        throw std::runtime_error("failed to allocate image memory!");
+    }
+
+    vkBindImageMemory(device, image, imageMemory, 0);
+}
+
+VkCommandBuffer beginSingleTimeCommands() {
     VkCommandBufferAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
     allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
@@ -1075,11 +1003,10 @@ void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) {
 
     vkBeginCommandBuffer(commandBuffer, &beginInfo);
 
-    VkBufferCopy copyRegion{};
-    copyRegion.srcOffset = 0;  // Optional
-    copyRegion.dstOffset = 0;  // Optional
-    copyRegion.size = size;
-    vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
+    return commandBuffer;
+}
+
+void endSingleTimeCommands(VkCommandBuffer commandBuffer) {
     vkEndCommandBuffer(commandBuffer);
 
     VkSubmitInfo submitInfo{};
@@ -1089,7 +1016,105 @@ void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) {
 
     vkQueueSubmit(graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
     vkQueueWaitIdle(graphicsQueue);
+
     vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
+}
+
+void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) {
+    VkCommandBuffer commandBuffer = beginSingleTimeCommands();
+
+    VkBufferCopy copyRegion{};
+    copyRegion.size = size;
+    vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
+
+    endSingleTimeCommands(commandBuffer);
+}
+
+void transitionImageLayout(VkImage image, VkFormat format,
+                           VkImageLayout oldLayout, VkImageLayout newLayout) {
+    VkCommandBuffer commandBuffer = beginSingleTimeCommands();
+    VkImageMemoryBarrier barrier{};
+    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    barrier.oldLayout = oldLayout;
+    barrier.newLayout = newLayout;
+
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+
+    barrier.image = image;
+    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    barrier.subresourceRange.baseMipLevel = 0;
+    barrier.subresourceRange.levelCount = 1;
+    barrier.subresourceRange.baseArrayLayer = 0;
+    barrier.subresourceRange.layerCount = 1;
+
+    barrier.srcAccessMask = 0;  // TODO
+    barrier.dstAccessMask = 0;  // TODO
+    vkCmdPipelineBarrier(commandBuffer, 0 /* TODO */, 0 /* TODO */, 0, 0,
+                         nullptr, 0, nullptr, 1, &barrier);
+
+    endSingleTimeCommands(commandBuffer);
+}
+
+void copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width,
+                       uint32_t height) {
+    VkCommandBuffer commandBuffer = beginSingleTimeCommands();
+
+    VkBufferImageCopy region{};
+    region.bufferOffset = 0;
+    region.bufferRowLength = 0;
+    region.bufferImageHeight = 0;
+
+    region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    region.imageSubresource.mipLevel = 0;
+    region.imageSubresource.baseArrayLayer = 0;
+    region.imageSubresource.layerCount = 1;
+
+    region.imageOffset = {0, 0, 0};
+    region.imageExtent = {width, height, 1};
+
+    vkCmdCopyBufferToImage(commandBuffer, buffer, image,
+                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+
+    endSingleTimeCommands(commandBuffer);
+}
+
+void CreateVKTextureImage() {
+    Image image = loadBMP("assets/textures/structured.bmp");
+
+    VkDeviceSize imageSize = image.width * image.height * 3;
+
+    if (!image.data) {
+        throw std::runtime_error("failed to load texture image!");
+    }
+
+    createBuffer(imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                     VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                 stagingBuffer, stagingBufferMemory);
+
+    void *data;
+    vkMapMemory(device, stagingBufferMemory, 0, imageSize, 0, &data);
+    memcpy(data, image.data, static_cast<size_t>(imageSize));
+    vkUnmapMemory(device, stagingBufferMemory);
+
+    free(image.data);
+
+    createImage(image.width, image.height, VK_FORMAT_R8G8B8A8_SRGB,
+                VK_IMAGE_TILING_OPTIMAL,
+                VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, textureImage,
+                textureImageMemory);
+
+    transitionImageLayout(textureImage, VK_FORMAT_R8G8B8A8_SRGB,
+                          VK_IMAGE_LAYOUT_UNDEFINED,
+                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    copyBufferToImage(stagingBuffer, textureImage,
+                      static_cast<uint32_t>(image.width),
+                      static_cast<uint32_t>(image.height));
+
+    transitionImageLayout(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
 }
 
 void CreateVKVertexBuffer(const std::vector<Vertex> &vertices) {
@@ -1423,6 +1448,70 @@ void CreateVKSyncPrimitives() {
     }
 }
 
+VkFormat findSupportedFormat(const std::vector<VkFormat> &candidates,
+                             VkImageTiling tiling,
+                             VkFormatFeatureFlags features) {
+    for (VkFormat format : candidates) {
+        VkFormatProperties props;
+        vkGetPhysicalDeviceFormatProperties(physicalDevice, format, &props);
+        if (tiling == VK_IMAGE_TILING_LINEAR &&
+            (props.linearTilingFeatures & features) == features) {
+            return format;
+        } else if (tiling == VK_IMAGE_TILING_OPTIMAL &&
+                   (props.optimalTilingFeatures & features) == features) {
+            return format;
+        }
+    }
+
+    throw std::runtime_error("failed to find supported format!");
+}
+
+VkImageView createImageView(VkImage image, VkFormat format,
+                            VkImageAspectFlags aspectFlags) {
+    VkImageViewCreateInfo viewInfo{};
+    viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    viewInfo.image = image;
+    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    viewInfo.format = format;
+    viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    viewInfo.subresourceRange.baseMipLevel = 0;
+    viewInfo.subresourceRange.levelCount = 1;
+    viewInfo.subresourceRange.baseArrayLayer = 0;
+    viewInfo.subresourceRange.layerCount = 1;
+    viewInfo.subresourceRange.aspectMask = aspectFlags;
+
+    VkImageView imageView;
+    if (vkCreateImageView(device, &viewInfo, nullptr, &imageView) !=
+        VK_SUCCESS) {
+        throw std::runtime_error("failed to create texture image view!");
+    }
+
+    return imageView;
+}
+
+VkFormat findDepthFormat() {
+    return findSupportedFormat(
+        {VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT,
+         VK_FORMAT_D24_UNORM_S8_UINT},
+        VK_IMAGE_TILING_OPTIMAL,
+        VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
+}
+
+bool hasStencilComponent(VkFormat format) {
+    return format == VK_FORMAT_D32_SFLOAT_S8_UINT ||
+           format == VK_FORMAT_D24_UNORM_S8_UINT;
+}
+
+void CreateVKDepthResources() {
+    VkFormat depthFormat = findDepthFormat();
+    createImage(
+        swapChainExtent.width, swapChainExtent.height, depthFormat,
+        VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthImage, depthImageMemory);
+    depthImageView =
+        createImageView(depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
+}
+
 void framebufferResizeCallback(GLFWwindow *window, int width, int height) {
     LOG("Framebuffer resized");
     framebufferResized = true;
@@ -1528,26 +1617,18 @@ int main(int argc, char **argv) {
     // }
     //
 
-    std::vector<Vertex> vertices = {
-        {{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},  // 0
-        {{0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},   // 1
-        {{0.5f, 0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}},    // 2
-        {{-0.5f, 0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}},   // 3
-        {{-0.5f, -0.5f, 0.5f}, {1.0f, 1.0f, 0.0f}},   // 4
-        {{0.5f, -0.5f, 0.5f}, {0.0f, 1.0f, 1.0f}},    // 5
-        {{0.5f, 0.5f, 0.5f}, {1.0f, 0.0f, 1.0f}},     // 6
-        {{-0.5f, 0.5f, 0.5f}, {0.0f, 0.0f, 0.0f}}     // 7
-    };
+    const std::vector<Vertex> vertices = {
+        {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}},
+        {{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}},
+        {{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}},
+        {{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}},
 
-    // Define the indices for the 3D cube
-    std::vector<uint16_t> indices = {
-        0, 1, 2, 2, 3, 0,  // Front face
-        4, 5, 6, 6, 7, 4,  // Back face
-        0, 1, 5, 5, 4, 0,  // Bottom face
-        2, 3, 7, 7, 6, 2,  // Top face
-        0, 3, 7, 7, 4, 0,  // Left face
-        1, 2, 6, 6, 5, 1   // Right face
-    };
+        {{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+        {{0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
+        {{0.5f, 0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}},
+        {{-0.5f, 0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}}};
+
+    const std::vector<uint16_t> indices = {0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7, 4};
 
     CreateVKInstance();
     CreateVKDebugMessenger();
@@ -1567,6 +1648,9 @@ int main(int argc, char **argv) {
     CreateVKGraphicsPipeline();
     CreateVKFramebuffers();
     CreateVKCommandPool();
+
+    CreateVKTextureImage();
+    CreateVKDepthResources();
 
     CreateVKVertexBuffer(vertices);
     CreateVKIndexBuffer(indices);
