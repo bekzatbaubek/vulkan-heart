@@ -1048,10 +1048,33 @@ void transitionImageLayout(VkImage image, VkFormat format,
     barrier.subresourceRange.baseArrayLayer = 0;
     barrier.subresourceRange.layerCount = 1;
 
-    barrier.srcAccessMask = 0;  // TODO
-    barrier.dstAccessMask = 0;  // TODO
-    vkCmdPipelineBarrier(commandBuffer, 0 /* TODO */, 0 /* TODO */, 0, 0,
-                         nullptr, 0, nullptr, 1, &barrier);
+    VkPipelineStageFlags sourceStage;
+    VkPipelineStageFlags destinationStage;
+
+    if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+        barrier.srcAccessMask = 0;
+        barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+
+        sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+        destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+    } else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+        sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+        destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    } else {
+        throw std::invalid_argument("unsupported layout transition!");
+    }
+
+    vkCmdPipelineBarrier(
+        commandBuffer,
+        sourceStage, destinationStage,
+        0,
+        0, nullptr,
+        0, nullptr,
+        1, &barrier
+    );
 
     endSingleTimeCommands(commandBuffer);
 }
@@ -1082,7 +1105,7 @@ void copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width,
 void CreateVKTextureImage() {
     Image image = loadBMP("assets/textures/structured.bmp");
 
-    VkDeviceSize imageSize = image.width * image.height * 3;
+    VkDeviceSize imageSize = image.width * image.height * 4;
 
     if (!image.data) {
         throw std::runtime_error("failed to load texture image!");
@@ -1093,7 +1116,7 @@ void CreateVKTextureImage() {
                      VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                  stagingBuffer, stagingBufferMemory);
 
-    void *data;
+    void *data = malloc(imageSize);
     vkMapMemory(device, stagingBufferMemory, 0, imageSize, 0, &data);
     memcpy(data, image.data, static_cast<size_t>(imageSize));
     vkUnmapMemory(device, stagingBufferMemory);
