@@ -1,10 +1,6 @@
 #ifndef IMAGE_H
 
-struct Image {
-    int width, height, channels;
-    unsigned char *data;
-};
-
+struct Image;
 Image loadBMP(const char *filename);
 
 #define IMAGE_H

@@ -40,6 +40,7 @@ vec3 operator-(const vec3 &a, const vec3 &b) {
 struct Vertex {
     vec3 pos;
     vec3 color;
+    vec2 texCoord;
 };
 
 struct mat4 {
