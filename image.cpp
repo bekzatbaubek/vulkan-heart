@@ -2,7 +2,6 @@
 
 #include <cstdint>
 #include <cstdio>
-#include <iostream>
 #include <stdexcept>
 
 struct Image {
