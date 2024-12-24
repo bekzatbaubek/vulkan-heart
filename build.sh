@@ -10,5 +10,6 @@ clang++ \
     -g \
     vulkan-heart.cpp \
     -o ./build/vulkan-heart \
+    -Ivendor/ \
     -lglfw \
     -lvulkan

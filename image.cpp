@@ -52,8 +52,9 @@ Image loadBMP(const char *filename) {
             uint8_t G = fgetc(file);
             uint8_t R = fgetc(file);
             uint8_t A = 255;
+            // std::cerr << "R: " << (int)R << " G: " << (int)G << " B: " << (int)B << '\n';
             // uint8_t A = fgetc(file);
-            image.data[i] = R << 24 | G << 16 | B << 8 | A;
+            image.data[i] = (A << 24) | (B << 16) | (G << 8) | R;
         }
     }
 

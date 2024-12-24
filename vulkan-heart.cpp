@@ -2,7 +2,6 @@
 #include <cstdint>
 #include <fstream>
 #include <iostream>
-#include <optional>
 #include <set>
 #include <stdexcept>
 #include <vector>
@@ -12,6 +11,9 @@
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
+
+#define TINYOBJLOADER_IMPLEMENTATION
+#include "tiny_obj_loader.h"
 
 #define MAX_FRAMES_IN_FLIGHT 2
 
@@ -198,7 +200,7 @@ bool checkValidationLayerSupport() {
 
 void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex,
                          const std::vector<Vertex> &vertices,
-                         const std::vector<uint16_t> &indices,
+                         const std::vector<uint32_t> &indices,
                          uint32_t currentFrame) {
     VkCommandBufferBeginInfo beginInfo{};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -245,7 +247,7 @@ void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex,
     VkBuffer vertexBuffers[] = {vertexBuffer};
     VkDeviceSize offsets[] = {0};
     vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
-    vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT16);
+    vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
                             pipelineLayout, 0, 1, &descriptorSets[currentFrame],
                             0, nullptr);
@@ -1030,7 +1032,7 @@ void updateUniformBuffer(uint32_t currentImage, Camera &cam) {
 
     UniformBufferObject ubo{};
 
-    float rotationSpeed = 1.0f;
+    float rotationSpeed = 0.0f;
     ubo.model = rotate(
         rotationSpeed * deltaTime * 45.0f * (3.14159265358979323846f / 180.0f),
         {0.0, 0.0, 1.0});
@@ -1050,7 +1052,7 @@ void updateUniformBuffer(uint32_t currentImage, Camera &cam) {
 }
 
 void drawFrame(const std::vector<Vertex> &vertices,
-               const std::vector<uint16_t> &indices, Camera &camera) {
+               const std::vector<uint32_t> &indices, Camera &camera) {
     static uint32_t currentFrame = 0;
     vkWaitForFences(device, 1, &inFlightFences[currentFrame], VK_TRUE,
                     UINT64_MAX);
@@ -1242,7 +1244,7 @@ getAttributeDescriptions() {
 }
 
 void CreateVKTextureImage() {
-    Image image = loadBMP("assets/textures/structured.bmp");
+    Image image = loadBMP("assets/textures/viking_room.bmp");
 
     VkDeviceSize imageSize = image.width * image.height * 4;
 
@@ -1275,7 +1277,7 @@ void CreateVKTextureImage() {
                       static_cast<uint32_t>(image.width),
                       static_cast<uint32_t>(image.height));
 
-    transitionImageLayout(textureImage, VK_FORMAT_R8G8B8A8_SRGB,
+    transitionImageLayout(textureImage, VK_FORMAT_R8G8B8A8_UINT,
                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                           VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 }
@@ -1311,7 +1313,7 @@ void CreateVKVertexBuffer(const std::vector<Vertex> &vertices) {
     vkFreeMemory(device, stagingBufferMemory, nullptr);
 }
 
-void CreateVKIndexBuffer(const std::vector<uint16_t> &indices) {
+void CreateVKIndexBuffer(const std::vector<uint32_t> &indices) {
     VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
 
     VkBuffer stagingBuffer;
@@ -1658,6 +1660,40 @@ void CreateVKSyncPrimitives() {
     }
 }
 
+void LoadModel(std::vector<Vertex> &vertices, std::vector<uint32_t> &indices, const std::string &model_path) {
+    tinyobj::attrib_t attrib;
+    std::vector<tinyobj::shape_t> shapes;
+    std::vector<tinyobj::material_t> materials;
+
+    std::string warn, err;
+    if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err,
+                          model_path.c_str())) {
+        throw std::runtime_error(warn + err);
+    }
+
+    for (const auto& shape : shapes) {
+        for (const auto& index : shape.mesh.indices) {
+            Vertex vertex{};
+
+            vertex.pos = {
+                attrib.vertices[3 * index.vertex_index + 0],
+                attrib.vertices[3 * index.vertex_index + 1],
+                attrib.vertices[3 * index.vertex_index + 2]
+            };
+
+            vertex.texCoord = {
+                attrib.texcoords[2 * index.texcoord_index + 0],
+                attrib.texcoords[2 * index.texcoord_index + 1]
+            };
+
+            vertex.color = {1.0f, 1.0f, 1.0f};
+
+            vertices.push_back(vertex);
+            indices.push_back(indices.size());
+        }
+    }
+}
+
 void framebufferResizeCallback(GLFWwindow *window, int width, int height) {
     LOG("Framebuffer resized");
     framebufferResized = true;
@@ -1670,7 +1706,7 @@ void CreateVKSurface() {
 }
 
 void processInput(GLFWwindow *window, Camera &camera) {
-    const float cameraSpeed = 0.04f;  // Adjust accordingly
+    float cameraSpeed = 0.05f;  // Adjust accordingly
 
     if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
         camera.position = camera.position + cameraSpeed * camera.direction;
@@ -1691,25 +1727,34 @@ void processInput(GLFWwindow *window, Camera &camera) {
 
     if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS) {
         camera.direction = camera.direction + cameraSpeed * camera.up;
+        camera.direction = normalize(camera.direction);
+        camera.up = normalize(cross(cross(camera.direction, camera.up), camera.direction));
     }
     if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS) {
         camera.direction = camera.direction - cameraSpeed * camera.up;
+        camera.direction = normalize(camera.direction);
+        camera.up = normalize(cross(cross(camera.direction, camera.up), camera.direction));
     }
     if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS) {
         camera.direction =
             camera.direction -
             normalize(cross(camera.direction, camera.up)) * cameraSpeed;
+
+        camera.up = normalize(cross(cross(camera.direction, camera.up), camera.direction));
     }
     if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) {
         camera.direction =
             camera.direction +
             normalize(cross(camera.direction, camera.up)) * cameraSpeed;
+
+        camera.up = normalize(cross(cross(camera.direction, camera.up), camera.direction));
     }
 
     // Reset camera position
     if (glfwGetKey(window, GLFW_KEY_0) == GLFW_PRESS) {
         camera.position = {0.0f, 0.0f, 2.0f};
         camera.direction = {0.0f, 0.0f, -1.0f};
+        camera.up = {-1.0f, 0.0f, 0.0f};
     }
 }
 
@@ -1718,78 +1763,25 @@ int main(int argc, char **argv) {
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 
-    window = glfwCreateWindow(800, 600, "Vulkan window", 0, 0);
+    int width = 800, height = 600;
+
+    window = glfwCreateWindow(width, height, "Vulkan window", 0, 0);
     glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
 
-    Camera camera({0.0f, 0.0f, 2.0f},   // Position
-                  {0.0f, 0.0f, -1.0f},  // Direction
-                  {0.0f, 1.0f, 0.0f},   // Up vector
+    Camera camera({3.0f, 0.0f, 2.0f},   // Position
+                  {-3.0f, 0.0f, -1.0f},  // Direction
+                  {-1.0f, 0.0f, 0.0f},   // Up vector
                   M_PI / 4,             // Field of view
-                  800.0f / 600.0f,      // Aspect ratio
+                  (float)width / height,      // Aspect ratio
                   0.1f,                 // Near plane
-                  10.0f                 // Far plane
+                  100.0f                 // Far plane
     );
 
-    // std::vector<Vertex> vertices = {{{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-    //                                 {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
-    //                                 {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
-    //                                 {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}};
+     std::string MODEL_PATH = "assets/models/viking_room.obj";
+     std::string TEXTURE_PATH = "assets/textures/viking_room.bmp";
 
-    // std::vector<uint16_t> indices = {0, 1, 2, 2, 3, 0};
-
-    // const int numSegments = 100;
-    // const float pi = 3.14159265358979323846f;
-
-    // std::vector<Vertex> vertices;
-    // vertices.reserve(numSegments + 1);
-    // std::vector<uint16_t> indices;
-    // indices.reserve(numSegments * 3);
-
-    // // Generate vertices
-    // for (int i = 0; i <= numSegments; ++i) {
-    //     float t = i * 2 * pi / numSegments;
-    //     float x = 16 * std::pow(std::sin(t), 3);
-    //     float y = 13 * std::cos(t) - 5 * std::cos(2 * t) - 2 * std::cos(3 *
-    //     t) -
-    //               std::cos(4 * t);
-    //     vertices.push_back({{x / 16.0f, y / 16.0f}, {1.0f, 0.0f, 0.0f}});
-    // }
-
-    // // Generate indices
-    // for (int i = 1; i < numSegments - 1; ++i) {
-    //     indices.push_back(0);
-    //     indices.push_back(i);
-    //     indices.push_back(i + 1);
-    // }
-    //
-
-    // const std::vector<Vertex> vertices = {
-    //     {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}},
-    //     {{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}},
-    //     {{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}},
-    //     {{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}},
-
-    //     {{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-    //     {{0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
-    //     {{0.5f, 0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}},
-    //     {{-0.5f, 0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}}};
-
-    // const std::vector<uint16_t> indices = {0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7,
-    // 4};
-    //
-
-    const std::vector<Vertex> vertices = {
-        {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
-        {{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
-        {{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
-        {{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}},
-
-        {{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
-        {{0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
-        {{0.5f, 0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
-        {{-0.5f, 0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}}};
-
-    const std::vector<uint16_t> indices = {0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7, 4};
+    std::vector<Vertex> vertices;
+    std::vector<uint32_t> indices;
 
     CreateVKInstance();
     CreateVKDebugMessenger();
@@ -1814,6 +1806,7 @@ int main(int argc, char **argv) {
     CreateVKTextureImageView();
     CreateVKTextureSampler();
 
+    LoadModel(vertices, indices, MODEL_PATH);
     CreateVKVertexBuffer(vertices);
     CreateVKIndexBuffer(indices);
     CreateVKUniformBuffers();
