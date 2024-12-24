@@ -2016,7 +2016,7 @@ int main(int argc, char **argv) {
     std::vector<Vertex> vertices;
     std::vector<uint32_t> indices;
 
-    std::vector<InstanceData> instanceData;
+    std::vector<InstanceData> instanceData(100);
 
     for (int i = 0; i < 10; i++) {
         for (int j = 0; j < 10; j++) {
