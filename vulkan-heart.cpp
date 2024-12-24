@@ -8,7 +8,6 @@
 
 #include "image.cpp"
 #include "math.cpp"
-#include "vulkan/vulkan_core.h"
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
@@ -39,6 +38,9 @@ VkPipeline graphicsPipeline;
 std::vector<VkFramebuffer> swapChainFramebuffers;
 VkCommandPool commandPool;
 
+// Query pool for gathering GPU timestaps
+VkPhysicalDeviceProperties G_physicalDeviceProperties;
+
 VkBuffer stagingBuffer;
 VkDeviceMemory stagingBufferMemory;
 
@@ -62,6 +64,8 @@ VkBuffer vertexBuffer;
 VkDeviceMemory vertexBufferMemory;
 VkBuffer indexBuffer;
 VkDeviceMemory indexBufferMemory;
+VkBuffer instanceBuffer;
+VkDeviceMemory instanceBufferMemory;
 
 std::vector<VkBuffer> uniformBuffers;
 std::vector<VkDeviceMemory> uniformBuffersMemory;
@@ -207,12 +211,9 @@ bool checkValidationLayerSupport() {
 }
 
 VkSampleCountFlagBits getMaxUsableSampleCount() {
-    VkPhysicalDeviceProperties physicalDeviceProperties;
-    vkGetPhysicalDeviceProperties(physicalDevice, &physicalDeviceProperties);
-
     VkSampleCountFlags counts =
-        physicalDeviceProperties.limits.framebufferColorSampleCounts &
-        physicalDeviceProperties.limits.framebufferDepthSampleCounts;
+        G_physicalDeviceProperties.limits.framebufferColorSampleCounts &
+        G_physicalDeviceProperties.limits.framebufferDepthSampleCounts;
     if (counts & VK_SAMPLE_COUNT_64_BIT) {
         return VK_SAMPLE_COUNT_64_BIT;
     }
@@ -235,9 +236,25 @@ VkSampleCountFlagBits getMaxUsableSampleCount() {
     return VK_SAMPLE_COUNT_1_BIT;
 }
 
+void PopulateVKPhysicalDeviceProperties() {
+    vkGetPhysicalDeviceProperties(physicalDevice, &G_physicalDeviceProperties);
+
+    msaaSamples = getMaxUsableSampleCount();
+
+    std::cerr << "Device name: " << G_physicalDeviceProperties.deviceName
+              << '\n';
+    std::cerr << "Limits:\n";
+    std::cerr << "Max MSAA: " << msaaSamples << '\n';
+    std::cerr << "Max Anisitrhopy: "
+              << G_physicalDeviceProperties.limits.maxSamplerAnisotropy << '\n';
+    std::cerr << "Timestamp period: "
+              << G_physicalDeviceProperties.limits.timestampPeriod << '\n';
+}
+
 void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex,
                          const std::vector<Vertex> &vertices,
                          const std::vector<uint32_t> &indices,
+                         const std::vector<InstanceData> &instanceData,
                          uint32_t currentFrame) {
     VkCommandBufferBeginInfo beginInfo{};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -282,14 +299,20 @@ void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex,
     vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
     VkBuffer vertexBuffers[] = {vertexBuffer};
+    VkBuffer instanceBuffers[] = {instanceBuffer};
+    VkDeviceSize instanceOffsets[] = {0};
     VkDeviceSize offsets[] = {0};
     vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
+    vkCmdBindVertexBuffers(commandBuffer, 1, 1, instanceBuffers,
+                           instanceOffsets);
+
     vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
                             pipelineLayout, 0, 1, &descriptorSets[currentFrame],
                             0, nullptr);
 
-    vkCmdDrawIndexed(commandBuffer, (uint32_t)(indices.size()), 1, 0, 0, 0);
+    vkCmdDrawIndexed(commandBuffer, (uint32_t)(indices.size()),
+                     instanceData.size(), 0, 0, 0);
 
     vkCmdEndRenderPass(commandBuffer);
 
@@ -882,9 +905,6 @@ void CreateVKImageViews() {
 }
 
 void CreateVKTextureSampler() {
-    VkPhysicalDeviceProperties properties{};
-    vkGetPhysicalDeviceProperties(physicalDevice, &properties);
-
     VkSamplerCreateInfo samplerInfo{};
     samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
     samplerInfo.magFilter = VK_FILTER_LINEAR;
@@ -893,7 +913,8 @@ void CreateVKTextureSampler() {
     samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
     samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
     samplerInfo.anisotropyEnable = VK_TRUE;
-    samplerInfo.maxAnisotropy = properties.limits.maxSamplerAnisotropy;
+    samplerInfo.maxAnisotropy =
+        G_physicalDeviceProperties.limits.maxSamplerAnisotropy;
     samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
     samplerInfo.unnormalizedCoordinates = VK_FALSE;
     samplerInfo.compareEnable = VK_FALSE;
@@ -1110,7 +1131,8 @@ void updateUniformBuffer(uint32_t currentImage, Camera &cam) {
 }
 
 void drawFrame(const std::vector<Vertex> &vertices,
-               const std::vector<uint32_t> &indices, Camera &camera) {
+               const std::vector<uint32_t> &indices,
+               const std::vector<InstanceData> &instanceData, Camera &camera) {
     static uint32_t currentFrame = 0;
     vkWaitForFences(device, 1, &inFlightFences[currentFrame], VK_TRUE,
                     UINT64_MAX);
@@ -1136,7 +1158,7 @@ void drawFrame(const std::vector<Vertex> &vertices,
     updateUniformBuffer(currentFrame, camera);
 
     recordCommandBuffer(commandBuffers[currentFrame], imageIndex, vertices,
-                        indices, currentFrame);
+                        indices, instanceData, currentFrame);
 
     VkSubmitInfo submitInfo{};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -1216,8 +1238,6 @@ void PickVKPhysicalDevice() {
     for (const auto &device : devices) {
         if (isDeviceSuitable(device)) {
             physicalDevice = device;
-            msaaSamples = getMaxUsableSampleCount();
-            std::cerr << "Max MSAA samples: " << msaaSamples << '\n';
             break;
         }
     }
@@ -1274,18 +1294,24 @@ void CreateVKLogicalDevice() {
     vkGetDeviceQueue(device, indices.presentFamily.value(), 0, &presentQueue);
 }
 
-static VkVertexInputBindingDescription getBindingDescription() {
-    VkVertexInputBindingDescription bindingDescription{};
-    bindingDescription.binding = 0;
-    bindingDescription.stride = sizeof(Vertex);
-    bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+static std::array<VkVertexInputBindingDescription, 2> getBindingDescriptions() {
 
-    return bindingDescription;
+    VkVertexInputBindingDescription vertexBindingDescription = {};
+    vertexBindingDescription.binding = 0;
+    vertexBindingDescription.stride = sizeof(Vertex);
+    vertexBindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+    VkVertexInputBindingDescription instanceBindingDescription = {};
+    instanceBindingDescription.binding = 1;
+    instanceBindingDescription.stride = sizeof(InstanceData);
+    instanceBindingDescription.inputRate = VK_VERTEX_INPUT_RATE_INSTANCE;
+
+    return {vertexBindingDescription, instanceBindingDescription};
 }
 
-static std::array<VkVertexInputAttributeDescription, 3>
+static std::array<VkVertexInputAttributeDescription, 5>
 getAttributeDescriptions() {
-    std::array<VkVertexInputAttributeDescription, 3> attributeDescriptions{};
+    std::array<VkVertexInputAttributeDescription, 5> attributeDescriptions{};
     attributeDescriptions[0].binding = 0;
     attributeDescriptions[0].location = 0;
     attributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
@@ -1300,6 +1326,16 @@ getAttributeDescriptions() {
     attributeDescriptions[2].location = 2;
     attributeDescriptions[2].format = VK_FORMAT_R32G32_SFLOAT;
     attributeDescriptions[2].offset = offsetof(Vertex, texCoord);
+
+    attributeDescriptions[3].binding = 1;
+    attributeDescriptions[3].location = 3;
+    attributeDescriptions[3].format = VK_FORMAT_R32G32B32_SFLOAT;
+    attributeDescriptions[3].offset = offsetof(InstanceData, position);
+
+    attributeDescriptions[4].binding = 1;
+    attributeDescriptions[4].location = 4;
+    attributeDescriptions[4].format = VK_FORMAT_R32G32B32_SFLOAT;
+    attributeDescriptions[4].offset = offsetof(InstanceData, color);
 
     return attributeDescriptions;
 }
@@ -1387,8 +1423,8 @@ void generateMipmaps(VkImage image, VkFormat imageFormat, int32_t texWidth,
     endSingleTimeCommands(commandBuffer);
 }
 
-void CreateVKTextureImage() {
-    Image image = loadBMP("assets/textures/viking_room.bmp");
+void CreateVKTextureImage(std::string &texture_path) {
+    Image image = loadBMP(texture_path.c_str());
 
     VkDeviceSize imageSize = image.width * image.height * 4;
     mipLevels =
@@ -1489,6 +1525,33 @@ void CreateVKIndexBuffer(const std::vector<uint32_t> &indices) {
     vkFreeMemory(device, stagingBufferMemory, nullptr);
 }
 
+void CreateVKInstanceBuffer(std::vector<InstanceData> &instanceData) {
+    VkDeviceSize bufferSize = sizeof(instanceData[0]) * instanceData.size();
+
+    VkBuffer stagingBuffer;
+    VkDeviceMemory stagingBufferMemory;
+    createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                     VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                 stagingBuffer, stagingBufferMemory);
+
+    void *data;
+    vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
+    memcpy(data, instanceData.data(), (size_t)bufferSize);
+    vkUnmapMemory(device, stagingBufferMemory);
+
+    createBuffer(
+        bufferSize,
+        VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, instanceBuffer,
+        instanceBufferMemory);
+
+    copyBuffer(stagingBuffer, instanceBuffer, bufferSize);
+
+    vkDestroyBuffer(device, stagingBuffer, nullptr);
+    vkFreeMemory(device, stagingBufferMemory, nullptr);
+}
+
 void CreateVKUniformBuffers() {
     VkDeviceSize bufferSize = sizeof(UniformBufferObject);
 
@@ -1572,13 +1635,13 @@ void CreateVKGraphicsPipeline() {
     vertexInputInfo.sType =
         VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 
-    auto bindingDescription = getBindingDescription();
+    auto bindingDescription = getBindingDescriptions();
     auto attributeDescriptions = getAttributeDescriptions();
 
-    vertexInputInfo.vertexBindingDescriptionCount = 1;
+    vertexInputInfo.vertexBindingDescriptionCount = bindingDescription.size();
     vertexInputInfo.vertexAttributeDescriptionCount =
         static_cast<uint32_t>(attributeDescriptions.size());
-    vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
+    vertexInputInfo.pVertexBindingDescriptions = bindingDescription.data();
     vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
 
     VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
@@ -1855,6 +1918,9 @@ void LoadModel(std::vector<Vertex> &vertices, std::vector<uint32_t> &indices,
             indices.push_back(indices.size());
         }
     }
+
+    std::cerr << "Loaded model with " << vertices.size() << " vertices and "
+              << indices.size() << " indices\n";
 }
 
 void framebufferResizeCallback(GLFWwindow *window, int width, int height) {
@@ -1950,12 +2016,22 @@ int main(int argc, char **argv) {
     std::vector<Vertex> vertices;
     std::vector<uint32_t> indices;
 
+    std::vector<InstanceData> instanceData;
+
+    for (int i = 0; i < 10; i++) {
+        for (int j = 0; j < 10; j++) {
+            instanceData.push_back({{i * 3.0f, j * 3.0f, 0.0f},
+                                    {1.0f, 0.0f, 0.0f}});
+        }
+    }
+
     CreateVKInstance();
     CreateVKDebugMessenger();
     CreateVKSurface();
 
     EnumerateVKExtensions();
     PickVKPhysicalDevice();
+    PopulateVKPhysicalDeviceProperties();
 
     CreateVKLogicalDevice();
     CreateVKSwapchain();
@@ -1970,13 +2046,14 @@ int main(int argc, char **argv) {
     CreateVKDepthResources();
     CreateVKFramebuffers();
 
-    CreateVKTextureImage();
+    CreateVKTextureImage(TEXTURE_PATH);
     CreateVKTextureImageView();
     CreateVKTextureSampler();
 
     LoadModel(vertices, indices, MODEL_PATH);
     CreateVKVertexBuffer(vertices);
     CreateVKIndexBuffer(indices);
+    CreateVKInstanceBuffer(instanceData);
     CreateVKUniformBuffers();
 
     CreateVKDescriptorPool();
@@ -1997,7 +2074,7 @@ int main(int argc, char **argv) {
             camera.aspectRatio = static_cast<float>(width) / height;
         }
 
-        drawFrame(vertices, indices, camera);
+        drawFrame(vertices, indices, instanceData, camera);
     }
 
     return 0;

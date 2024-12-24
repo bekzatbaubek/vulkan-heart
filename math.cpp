@@ -43,6 +43,12 @@ struct Vertex {
     vec2 texCoord;
 };
 
+struct InstanceData {
+    vec3 position;
+    vec3 color;
+};
+
+
 struct mat4 {
     float data[4][4] = {0};
 };
