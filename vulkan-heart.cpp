@@ -1,10 +1,12 @@
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
+#include <array>
 #include <fstream>
 #include <iostream>
-#include <set>
 #include <stdexcept>
 #include <vector>
+#include <cmath>
 
 #include "image.cpp"
 #include "math.cpp"
@@ -87,7 +89,7 @@ std::vector<const char *> validationLayers = {
 
 std::vector<const char *> deviceExtensions = {
     VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-    "VK_KHR_portability_subset",
+    // "VK_KHR_portability_subset",
 };
 
 #ifdef NDEBUG
@@ -1222,8 +1224,14 @@ void EnumerateVKExtensions() {
     uint32_t extensionCount = 0;
     vkEnumerateInstanceExtensionProperties(0, &extensionCount, 0);
 
-    VkExtensionProperties extensions[extensionCount];
-    vkEnumerateInstanceExtensionProperties(0, &extensionCount, extensions);
+    std::vector<VkExtensionProperties> extensions(extensionCount);
+    vkEnumerateInstanceExtensionProperties(0, &extensionCount, extensions.data());
+
+    std::cout << "available extensions:\n";
+
+    for (const auto &extension : extensions) {
+        std::cout << '\t' << extension.extensionName << '\n';
+    }
 }
 
 void PickVKPhysicalDevice() {
@@ -1236,6 +1244,16 @@ void PickVKPhysicalDevice() {
     vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
 
     for (const auto &device : devices) {
+
+        VkPhysicalDeviceProperties deviceProperties;
+        vkGetPhysicalDeviceProperties(device, &deviceProperties);
+
+        std::cerr << "Device name: " << deviceProperties.deviceName << '\n';
+        std::cerr << "Device type: " << deviceProperties.deviceType << '\n';
+        std::cerr << "API version: " << VK_VERSION_MAJOR(deviceProperties.apiVersion) << "."
+                  << VK_VERSION_MINOR(deviceProperties.apiVersion) << "."
+                  << VK_VERSION_PATCH(deviceProperties.apiVersion) << '\n';
+
         if (isDeviceSuitable(device)) {
             physicalDevice = device;
             break;
@@ -1599,8 +1617,8 @@ void CreateVKDescriptorSetLayout() {
 }
 
 void CreateVKGraphicsPipeline() {
-    auto vertShaderCode = readFile("shaders/heart.vert.spv");
-    auto fragShaderCode = readFile("shaders/heart.frag.spv");
+    auto vertShaderCode = readFile("../shaders/heart.vert.spv");
+    auto fragShaderCode = readFile("../shaders/heart.frag.spv");
 
     VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
     VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
@@ -2004,14 +2022,14 @@ int main(int argc, char **argv) {
     Camera camera({3.0f, 0.0f, 2.0f},     // Position
                   {-3.0f, 0.0f, -1.0f},   // Direction
                   {-1.0f, 0.0f, 0.0f},    // Up vector
-                  M_PI / 4,               // Field of view
+                  3.1415 / 4,               // Field of view
                   (float)width / height,  // Aspect ratio
                   0.1f,                   // Near plane
                   100.0f                  // Far plane
     );
 
-    std::string MODEL_PATH = "assets/models/viking_room.obj";
-    std::string TEXTURE_PATH = "assets/textures/viking_room.bmp";
+    std::string MODEL_PATH = "../assets/models/viking_room.obj";
+    std::string TEXTURE_PATH = "../assets/textures/viking_room.bmp";
 
     std::vector<Vertex> vertices;
     std::vector<uint32_t> indices;
