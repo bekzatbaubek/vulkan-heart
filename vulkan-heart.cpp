@@ -1220,10 +1220,10 @@ void CreateVKDebugMessenger() {
 
 void EnumerateVKExtensions() {
     uint32_t extensionCount = 0;
-    vkEnumerateInstanceExtensionProperties(0, &extensionCount, 0);
+    vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
 
-    VkExtensionProperties extensions[extensionCount];
-    vkEnumerateInstanceExtensionProperties(0, &extensionCount, extensions);
+    std::array<VkExtensionProperties, 10> extensions;
+    vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, extensions.data());
 }
 
 void PickVKPhysicalDevice() {
