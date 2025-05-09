@@ -10,7 +10,7 @@ struct Image {
 };
 
 Image loadBMP(const char *filename) {
-    Image image;
+    Image imwage;
     FILE *file = fopen(filename, "rb");
     if (!file) {
         fprintf(stderr, "Error: could not open file %s\n", filename);

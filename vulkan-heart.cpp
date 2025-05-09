@@ -130,11 +130,6 @@ struct Camera {
     }
 };
 
-void LOG(const char *msg) {
-    auto ts = std::chrono::system_clock::now();
-    std::cerr << ts << " " << msg << '\n';
-}
-
 static std::vector<char> readFile(const std::string &filename) {
     std::ifstream file(filename, std::ios::ate | std::ios::binary);
 
@@ -1223,7 +1218,8 @@ void EnumerateVKExtensions() {
     vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
 
     std::array<VkExtensionProperties, 10> extensions;
-    vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, extensions.data());
+    vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount,
+                                           extensions.data());
 }
 
 void PickVKPhysicalDevice() {
@@ -1295,7 +1291,6 @@ void CreateVKLogicalDevice() {
 }
 
 static std::array<VkVertexInputBindingDescription, 2> getBindingDescriptions() {
-
     VkVertexInputBindingDescription vertexBindingDescription = {};
     vertexBindingDescription.binding = 0;
     vertexBindingDescription.stride = sizeof(Vertex);
@@ -1924,7 +1919,6 @@ void LoadModel(std::vector<Vertex> &vertices, std::vector<uint32_t> &indices,
 }
 
 void framebufferResizeCallback(GLFWwindow *window, int width, int height) {
-    LOG("Framebuffer resized");
     framebufferResized = true;
 }
 
@@ -2020,8 +2014,8 @@ int main(int argc, char **argv) {
 
     for (int i = 0; i < 10; i++) {
         for (int j = 0; j < 10; j++) {
-            instanceData.push_back({{i * 3.0f, j * 3.0f, 0.0f},
-                                    {1.0f, 0.0f, 0.0f}});
+            instanceData.push_back(
+                {{i * 3.0f, j * 3.0f, 0.0f}, {1.0f, 0.0f, 0.0f}});
         }
     }
 

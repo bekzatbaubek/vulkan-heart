@@ -15,10 +15,8 @@ clang++ \
 clang++ \
     --std=c++17 \
     -g \
-    vkh_renderer.cpp \
     vkh_platform.cpp \
     -o ./build/vkh_platform \
-    -Ivendor/ \
     -lglfw \
     -lvulkan
 
