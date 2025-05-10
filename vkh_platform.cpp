@@ -1,19 +1,19 @@
-#include "vulkan/vulkan_core.h"
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
 #include <dlfcn.h>
 #include <sys/stat.h>
 
+#define GLFW_INCLUDE_VULKAN
+#include <GLFW/glfw3.h>
+
 #include <cassert>
-#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <iostream>
-#include <thread>
 
 #include "vkh_game.hpp"
+
+#define InvalidCodePath assert("Invalid Code Path" && 0)
 
 #define kilobytes(n) ((n) * 1024)
 #define megabytes(n) ((n) * 1024 * 1024)
@@ -21,10 +21,13 @@
 
 typedef uint32_t bool32;
 
-time_t getLastModified(const char* path) {
-    struct stat attr;
-    return stat(path, &attr) == 0 ? attr.st_mtime : 0;
-}
+struct PlatformContext {
+    GLFWwindow* window;
+};
+
+struct window_width_height {
+    int width, height;
+};
 
 struct memory_arena {
     uint8_t* base;
@@ -59,6 +62,18 @@ temp_arena begin_temp_arena(memory_arena* arena) {
 
 void end_temp_arena(temp_arena* temp) { temp->parent->used = temp->prev_used; }
 
+time_t getLastModified(const char* path) {
+    struct stat attr;
+    return stat(path, &attr) == 0 ? attr.st_mtime : 0;
+}
+
+void handle_input(game_input* input) {}
+
+struct queue_indices {
+    uint32_t* graphics;
+    uint32_t* present;
+};
+
 struct VulkanContext {
     VkInstance instance;
     VkPhysicalDevice physical_device;
@@ -66,7 +81,11 @@ struct VulkanContext {
     VkQueue graphics_queue;
     VkQueue present_queue;
 
+    VkPhysicalDeviceFeatures device_features;
+    VkPhysicalDeviceProperties device_properties;
+
     // Swapchain
+    VkSwapchainKHR old_swapchain = VK_NULL_HANDLE;
     VkSwapchainKHR swapchain;
     VkFormat swapchain_format;
     VkExtent2D swapchain_extent;
@@ -105,11 +124,6 @@ debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
 
     return VK_FALSE;
 }
-
-struct queue_indices {
-    uint32_t* graphics;
-    uint32_t* present;
-};
 
 queue_indices get_graphics_and_present_queue_indices(VulkanContext* context,
                                                      memory_arena* arena) {
@@ -153,9 +167,32 @@ queue_indices get_graphics_and_present_queue_indices(VulkanContext* context,
     return result;
 }
 
-VkPhysicalDevice ChooseDiscreteGPU(VkPhysicalDevice* devices,
+VkPhysicalDevice ChooseDiscreteGPU(VulkanContext* context,
+                                   VkPhysicalDevice* devices,
                                    uint32_t device_count) {
     assert(device_count > 0);
+
+    for (int i = 0; i < device_count; i++) {
+        VkPhysicalDeviceProperties device_properties;
+        vkGetPhysicalDeviceProperties(devices[i], &device_properties);
+
+        VkPhysicalDeviceFeatures device_features;
+        vkGetPhysicalDeviceFeatures(devices[i], &device_features);
+
+        if (device_properties.deviceType ==
+                VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU ||
+            device_properties.deviceType ==
+                VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
+            std::cerr << "GPU found\n"
+                      << "GPU name: " << device_properties.deviceName << '\n';
+
+            context->device_features = device_features;
+            context->device_properties = device_properties;
+
+            return devices[i];
+        }
+    }
+
     return devices[0];
 }
 
@@ -355,12 +392,23 @@ void CreateSwapchain(VulkanContext* context, GLFWwindow* window,
 
     std::cerr << "Surface capabilities: minImageCount = "
               << capabilities.minImageCount
-              << ", maxImageCount = " << capabilities.maxImageCount
-              << std::endl;
+              << ", maxImageCount = " << capabilities.maxImageCount << '\n';
+
+    uint32_t imageCount = capabilities.minImageCount + 1;
+    if (capabilities.maxImageCount > 0 &&
+        imageCount > capabilities.maxImageCount) {
+        imageCount = capabilities.maxImageCount;
+    }
+
+    // uint32_t imageCount = context->MAX_FRAMES_IN_FLIGHT;
+
+    std::cerr << "Engine Image Count" << imageCount << '\n';
 
     uint32_t formatCount;
     vkGetPhysicalDeviceSurfaceFormatsKHR(context->physical_device,
                                          context->surface, &formatCount, 0);
+
+    temp_arena tmp = begin_temp_arena(parent_arena);
 
     if (formatCount) {
         VkSurfaceFormatKHR* formats = (VkSurfaceFormatKHR*)arena_push(
@@ -393,9 +441,14 @@ void CreateSwapchain(VulkanContext* context, GLFWwindow* window,
 
         for (uint32_t i = 0; i < presentModeCount; ++i) {
             if (presentModes[i] == VK_PRESENT_MODE_MAILBOX_KHR) {
-                std::cerr << "Found suitable present mode\n";
+                std::cerr << "Found mailbox present mode\n";
                 presentMode = presentModes[i];
                 break;
+            }
+            if (presentModes[i] == VK_PRESENT_MODE_IMMEDIATE_KHR) {
+                std::cerr << "Found immediate present mode\n";
+                // presentMode = presentModes[i];
+                // break;
             }
         }
     }
@@ -416,12 +469,6 @@ void CreateSwapchain(VulkanContext* context, GLFWwindow* window,
     }
 
     extent = actualExtent;
-
-    uint32_t imageCount = capabilities.minImageCount + 1;
-    if (capabilities.maxImageCount > 0 &&
-        imageCount > capabilities.maxImageCount) {
-        imageCount = capabilities.maxImageCount;
-    }
 
     VkSwapchainCreateInfoKHR createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
@@ -451,7 +498,8 @@ void CreateSwapchain(VulkanContext* context, GLFWwindow* window,
     createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
     createInfo.presentMode = presentMode;
     createInfo.clipped = VK_TRUE;
-    createInfo.oldSwapchain = VK_NULL_HANDLE;
+
+    createInfo.oldSwapchain = context->old_swapchain;
 
     VkResult res = vkCreateSwapchainKHR(context->device, &createInfo, 0,
                                         &context->swapchain);
@@ -459,16 +507,22 @@ void CreateSwapchain(VulkanContext* context, GLFWwindow* window,
 
     vkGetSwapchainImagesKHR(context->device, context->swapchain, &imageCount,
                             0);
+
+    end_temp_arena(&tmp);
+
     VkImage* swapchain_images =
         (VkImage*)arena_push(parent_arena, imageCount * sizeof(VkImage));
-
     vkGetSwapchainImagesKHR(context->device, context->swapchain, &imageCount,
                             swapchain_images);
 
     context->swapchain_image_count = imageCount;
 
-    context->swapchain_images = (VkImageView*)arena_push(
-        parent_arena, imageCount * sizeof(VkImageView));
+    if (context->old_swapchain) {
+        // Recreating swapchain, no need to realloc memory
+    } else {
+        context->swapchain_images = (VkImageView*)arena_push(
+            parent_arena, imageCount * sizeof(VkImageView));
+    }
 
     for (int i = 0; i < imageCount; i++) {
         VkImageViewCreateInfo viewInfo{};
@@ -495,7 +549,7 @@ void CreateSwapchain(VulkanContext* context, GLFWwindow* window,
     context->swapchain_extent = extent;
 }
 
-void CreateRenderPass(VulkanContext* context, memory_arena* arena) {
+void CreateRenderPass(VulkanContext* context) {
     VkAttachmentDescription color_attachment{};
 
     color_attachment.format = context->swapchain_format;
@@ -543,9 +597,13 @@ void CreateRenderPass(VulkanContext* context, memory_arena* arena) {
     assert(res == VK_SUCCESS);
 }
 
-void CreateFramebuffers(VulkanContext* context, memory_arena* arena) {
-    context->framebuffers = (VkFramebuffer*)arena_push(
-        arena, sizeof(VkFramebuffer) * context->swapchain_image_count);
+void CreateFramebuffers(VulkanContext* context, memory_arena* arena,
+                        bool recreate) {
+    if (recreate) {
+    } else {
+        context->framebuffers = (VkFramebuffer*)arena_push(
+            arena, sizeof(VkFramebuffer) * context->swapchain_image_count);
+    }
 
     for (uint32_t i = 0; i < context->swapchain_image_count; i++) {
         VkImageView attachments[] = {context->swapchain_images[i]};
@@ -672,6 +730,23 @@ void CreateSyncObjects(VulkanContext* context, memory_arena* arena) {
     }
 }
 
+void RecreateSwapchainResorces(VulkanContext* context, GLFWwindow* window,
+                               memory_arena* arena) {
+    std::cerr << "Recreating swapchain\n";
+    vkDeviceWaitIdle(context->device);
+
+    for (int i = 0; i < context->swapchain_image_count; i++) {
+        vkDestroyImageView(context->device, context->swapchain_images[i], 0);
+        vkDestroyFramebuffer(context->device, context->framebuffers[i], 0);
+    }
+    context->old_swapchain = context->swapchain;
+
+    CreateSwapchain(context, window, arena);
+    CreateFramebuffers(context, arena, true);
+
+    vkDestroySwapchainKHR(context->device, context->old_swapchain, nullptr);
+}
+
 void renderer_init(VulkanContext* context, GLFWwindow* window,
                    memory_arena* renderer_arena) {
     const char* validation_layers[] = {"VK_LAYER_KHRONOS_validation"};
@@ -727,10 +802,7 @@ void renderer_init(VulkanContext* context, GLFWwindow* window,
 #ifndef NDEBUG
     extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 #endif
-
     extensions.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
-    extensions.push_back(
-        VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
 
     instance_info.enabledExtensionCount = extensions.size();
     instance_info.ppEnabledExtensionNames = extensions.data();
@@ -753,7 +825,8 @@ void renderer_init(VulkanContext* context, GLFWwindow* window,
     VkPhysicalDevice* devices = (VkPhysicalDevice*)arena_push(
         renderer_arena, sizeof(VkPhysicalDevice) * device_count);
     vkEnumeratePhysicalDevices(context->instance, &device_count, devices);
-    context->physical_device = ChooseDiscreteGPU(devices, device_count);
+    context->physical_device =
+        ChooseDiscreteGPU(context, devices, device_count);
 
     glfwCreateWindowSurface(context->instance, window, nullptr,
                             &context->surface);
@@ -825,11 +898,11 @@ void renderer_init(VulkanContext* context, GLFWwindow* window,
     // 4. Swapchain
     CreateSwapchain(context, window, renderer_arena);
 
-    CreateRenderPass(context, renderer_arena);
+    CreateRenderPass(context);
 
     CreateGraphicsPipeline(context, renderer_arena);
 
-    CreateFramebuffers(context, renderer_arena);
+    CreateFramebuffers(context, renderer_arena, false);
 
     CreateCommandPool(context, renderer_arena);
     CreateCommandBuffer(context, renderer_arena);
@@ -837,7 +910,8 @@ void renderer_init(VulkanContext* context, GLFWwindow* window,
     CreateSyncObjects(context, renderer_arena);
 }
 
-void drawFrame(VulkanContext* context, memory_arena* arena) {
+void drawFrame(VulkanContext* context, memory_arena* arena,
+               GLFWwindow* window) {
     static uint32_t currentFrame = 0;
 
     vkWaitForFences(context->device, 1, &context->inFlightFence[currentFrame],
@@ -845,9 +919,18 @@ void drawFrame(VulkanContext* context, memory_arena* arena) {
     vkResetFences(context->device, 1, &context->inFlightFence[currentFrame]);
 
     uint32_t imageIndex;
-    vkAcquireNextImageKHR(context->device, context->swapchain, UINT64_MAX,
-                          context->imageAvailableSemaphore[currentFrame],
-                          VK_NULL_HANDLE, &imageIndex);
+    VkResult image_result =
+        vkAcquireNextImageKHR(context->device, context->swapchain, UINT64_MAX,
+                              context->imageAvailableSemaphore[currentFrame],
+                              VK_NULL_HANDLE, &imageIndex);
+
+    if (image_result == VK_ERROR_OUT_OF_DATE_KHR) {
+        RecreateSwapchainResorces(context, window, arena);
+        return;
+    } else if (image_result != VK_SUCCESS &&
+               image_result != VK_SUBOPTIMAL_KHR) {
+        InvalidCodePath;
+    }
 
     vkResetCommandBuffer(context->command_buffer[currentFrame], 0);
     RecordCommandBuffer(context, imageIndex, arena, currentFrame);
@@ -886,7 +969,15 @@ void drawFrame(VulkanContext* context, memory_arena* arena) {
     presentInfo.pSwapchains = swapChains;
     presentInfo.pImageIndices = &imageIndex;
 
-    vkQueuePresentKHR(context->present_queue, &presentInfo);
+    VkResult present_result =
+        vkQueuePresentKHR(context->present_queue, &presentInfo);
+
+    if (present_result == VK_ERROR_OUT_OF_DATE_KHR ||
+        present_result == VK_SUBOPTIMAL_KHR) {
+        RecreateSwapchainResorces(context, window, arena);
+    } else if (present_result != VK_SUCCESS) {
+        InvalidCodePath;
+    }
 
     currentFrame = (currentFrame + 1) % context->MAX_FRAMES_IN_FLIGHT;
 }
@@ -895,6 +986,7 @@ int main(int argc, char* argv[]) {
     glfwInit();
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     GLFWwindow* window = glfwCreateWindow(800, 600, "Vulkan Heart", 0, 0);
+
     assert(window);
 
     const char* sourcePath = "./build/lib.so";
@@ -920,12 +1012,11 @@ int main(int argc, char* argv[]) {
 
     uint64_t timer_frequency = glfwGetTimerFrequency();
 
-    uint32_t target_FPS = 30;
-
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
 
         uint64_t start_time = glfwGetTimerValue();
+
         time_t currentModified = getLastModified(sourcePath);
         if (currentModified > lastModified) {
             lastModified = currentModified;
@@ -937,21 +1028,21 @@ int main(int argc, char* argv[]) {
         }
 
         gameUpdateAndRender(&state);
-        drawFrame(&context, &vk_arena);
+        drawFrame(&context, &vk_arena, window);
 
         uint64_t end_time = glfwGetTimerValue();
-        double time_elapsed = ((double)end_time / timer_frequency) -
-                              ((double)start_time / timer_frequency);
-        uint64_t sleepTime = (1000.0 / target_FPS) - (uint64_t)time_elapsed;
-        // std::cerr << "Elapsed time: " << time_elapsed
-        //           << "ms, Sleep time: " << sleepTime << "ms\n";
-        // std::cerr << "FPS: " << 1000.0 / (time_elapsed + sleepTime) <<
-        // "\n";
-        std::this_thread::sleep_for(std::chrono::milliseconds(sleepTime));
+        double time_elapsed_seconds =
+            ((double)end_time - (double)start_time) / timer_frequency;
+
+#if 0
+        std::cerr << "Elapsed time: " << time_elapsed_seconds * 1000.0f
+                  << "ms\n"
+                  << "FPS: " << 1.0f / (time_elapsed_seconds) << "\n";
+#endif
     }
-    vkDeviceWaitIdle(context.device);
 
     dlclose(so_handle);
+    vkDeviceWaitIdle(context.device);
 
     return 0;
 }

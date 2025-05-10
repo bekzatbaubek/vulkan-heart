@@ -48,9 +48,8 @@ struct InstanceData {
     vec3 color;
 };
 
-
 struct mat4 {
-    float data[4][4] = {0};
+    float data[4][4] = {{0}};
 };
 
 mat4 identity() {

@@ -2,3 +2,4 @@ build
 .zed
 *.spv
 .DS_Store
+*.log
