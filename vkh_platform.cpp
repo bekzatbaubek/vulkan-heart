@@ -21,10 +21,6 @@
 
 typedef uint32_t bool32;
 
-struct PlatformContext {
-    GLFWwindow* window;
-};
-
 struct window_width_height {
     int width, height;
 };
@@ -67,7 +63,7 @@ time_t getLastModified(const char* path) {
     return stat(path, &attr) == 0 ? attr.st_mtime : 0;
 }
 
-void handle_input(game_input* input) {}
+void handle_input(game_input* input) {};
 
 struct queue_indices {
     uint32_t* graphics;
@@ -379,8 +375,7 @@ void CreateGraphicsPipeline(VulkanContext* context, memory_arena* arena) {
     end_temp_arena(&tmp);
 }
 
-void CreateSwapchain(VulkanContext* context, GLFWwindow* window,
-                     memory_arena* parent_arena) {
+void CreateSwapchain(VulkanContext* context, memory_arena* parent_arena) {
     // Check whether the device meets requirements
     VkSurfaceFormatKHR surfaceFormat;
     VkSurfaceCapabilitiesKHR capabilities;
@@ -453,10 +448,7 @@ void CreateSwapchain(VulkanContext* context, GLFWwindow* window,
         }
     }
 
-    int width, height;
-    glfwGetFramebufferSize(window, &width, &height);
-
-    VkExtent2D actualExtent = {(uint32_t)(width), (uint32_t)(height)};
+    VkExtent2D actualExtent = capabilities.currentExtent;
 
     if (actualExtent.width > capabilities.maxImageExtent.width &&
         actualExtent.height > capabilities.maxImageExtent.height) {
@@ -730,9 +722,9 @@ void CreateSyncObjects(VulkanContext* context, memory_arena* arena) {
     }
 }
 
-void RecreateSwapchainResorces(VulkanContext* context, GLFWwindow* window,
-                               memory_arena* arena) {
+void RecreateSwapchainResorces(VulkanContext* context, memory_arena* arena) {
     std::cerr << "Recreating swapchain\n";
+
     vkDeviceWaitIdle(context->device);
 
     for (int i = 0; i < context->swapchain_image_count; i++) {
@@ -741,7 +733,7 @@ void RecreateSwapchainResorces(VulkanContext* context, GLFWwindow* window,
     }
     context->old_swapchain = context->swapchain;
 
-    CreateSwapchain(context, window, arena);
+    CreateSwapchain(context, arena);
     CreateFramebuffers(context, arena, true);
 
     vkDestroySwapchainKHR(context->device, context->old_swapchain, nullptr);
@@ -896,7 +888,7 @@ void renderer_init(VulkanContext* context, GLFWwindow* window,
     assert(res == VK_SUCCESS);
 
     // 4. Swapchain
-    CreateSwapchain(context, window, renderer_arena);
+    CreateSwapchain(context, renderer_arena);
 
     CreateRenderPass(context);
 
@@ -925,7 +917,7 @@ void drawFrame(VulkanContext* context, memory_arena* arena,
                               VK_NULL_HANDLE, &imageIndex);
 
     if (image_result == VK_ERROR_OUT_OF_DATE_KHR) {
-        RecreateSwapchainResorces(context, window, arena);
+        RecreateSwapchainResorces(context, arena);
         return;
     } else if (image_result != VK_SUCCESS &&
                image_result != VK_SUBOPTIMAL_KHR) {
@@ -974,7 +966,7 @@ void drawFrame(VulkanContext* context, memory_arena* arena,
 
     if (present_result == VK_ERROR_OUT_OF_DATE_KHR ||
         present_result == VK_SUBOPTIMAL_KHR) {
-        RecreateSwapchainResorces(context, window, arena);
+        RecreateSwapchainResorces(context, arena);
     } else if (present_result != VK_SUCCESS) {
         InvalidCodePath;
     }
@@ -983,11 +975,23 @@ void drawFrame(VulkanContext* context, memory_arena* arena,
 }
 
 int main(int argc, char* argv[]) {
-    glfwInit();
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    GLFWwindow* window = glfwCreateWindow(800, 600, "Vulkan Heart", 0, 0);
+    int window_width = 800;
+    int window_height = 600;
 
+    int min_window_width = 400;
+    int min_window_height = 300;
+
+    glfwInit();
+
+    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+
+    GLFWwindow* window =
+        glfwCreateWindow(window_width, window_height, "Vulkan Heart", 0, 0);
     assert(window);
+
+    glfwSetWindowAspectRatio(window, window_width, window_height);
+    glfwSetWindowSizeLimits(window, min_window_width, min_window_height,
+                            GLFW_DONT_CARE, GLFW_DONT_CARE);
 
     const char* sourcePath = "./build/lib.so";
     game_update_t gameUpdateAndRender = 0;
@@ -997,13 +1001,13 @@ int main(int argc, char* argv[]) {
         (game_update_t)dlsym(so_handle, "game_update_and_render");
     time_t lastModified = getLastModified(sourcePath);
 
-    memory_arena vk_arena = {0};
-    arena_init(&vk_arena, megabytes(128));
+    memory_arena renderer_arena = {0};
+    arena_init(&renderer_arena, megabytes(128));
 
     VulkanContext context = {0};
-    renderer_init(&context, window, &vk_arena);
+    renderer_init(&context, window, &renderer_arena);
 
-    game_memory state;
+    game_memory state = {0};
     state.permanent_store_size = megabytes((uint64_t)256);
     state.permanent_store = malloc(state.permanent_store_size);
 
@@ -1017,6 +1021,9 @@ int main(int argc, char* argv[]) {
 
         uint64_t start_time = glfwGetTimerValue();
 
+        game_input input = {};
+        handle_input(&input);
+
         time_t currentModified = getLastModified(sourcePath);
         if (currentModified > lastModified) {
             lastModified = currentModified;
@@ -1027,8 +1034,8 @@ int main(int argc, char* argv[]) {
                 (game_update_t)dlsym(so_handle, "game_update_and_render");
         }
 
-        gameUpdateAndRender(&state);
-        drawFrame(&context, &vk_arena, window);
+        gameUpdateAndRender(&state, &input);
+        drawFrame(&context, &renderer_arena, window);
 
         uint64_t end_time = glfwGetTimerValue();
         double time_elapsed_seconds =

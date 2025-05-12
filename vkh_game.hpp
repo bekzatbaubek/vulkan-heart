@@ -12,10 +12,10 @@ struct game_memory {
     void *transient_store;
 };
 
-typedef void (*game_update_t)(game_memory *state);
+typedef void (*game_update_t)(game_memory *state, game_input *input);
 
 extern "C" {
-void game_update_and_render(game_memory *state);
+void game_update_and_render(game_memory *state, game_input *input);
 }
 
 #define VKH_GAME_HPP
