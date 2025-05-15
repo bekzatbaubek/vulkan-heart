@@ -7,6 +7,8 @@ struct vec3 {
     float x, y, z;
 };
 
+typedef vec3 pos3;
+
 vec3 normalize(const vec3 &v) {
     float length = sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
     return {v.x / length, v.y / length, v.z / length};
@@ -36,12 +38,6 @@ vec3 operator+(const vec3 &a, const vec3 &b) {
 vec3 operator-(const vec3 &a, const vec3 &b) {
     return {a.x - b.x, a.y - b.y, a.z - b.z};
 }
-
-struct Vertex {
-    vec3 pos;
-    vec3 color;
-    vec2 texCoord;
-};
 
 struct InstanceData {
     vec3 position;
@@ -120,11 +116,27 @@ mat4 perspective(float fov, float aspect, float near, float far) {
     float tanHalfFov = tan(fov / 2.0f);
 
     result.data[0][0] = 1.0f / (aspect * tanHalfFov);
-    result.data[1][1] = 1.0f / tanHalfFov;
-    result.data[2][2] = -(far + near) / (far - near);
+    result.data[1][1] =
+        -1.0f / tanHalfFov;  // Note the negative sign for Y-flip
+    result.data[2][2] = far / (near - far);
     result.data[2][3] = -1.0f;
-    result.data[3][2] = -(2.0f * far * near) / (far - near);
+    result.data[3][2] = -(far * near) / (far - near);
     result.data[3][3] = 0.0f;
+
+    return result;
+}
+
+mat4 ortho(float left, float right, float bottom, float top, float near,
+           float far) {
+    mat4 result = identity();
+
+    result.data[0][0] = 2.0f / (right - left);
+    result.data[1][1] = 2.0f / (top - bottom);
+    result.data[2][2] = -2.0f / (far - near);
+    result.data[3][0] = -(right + left) / (right - left);
+    result.data[3][1] = -(top + bottom) / (top - bottom);
+    result.data[3][2] = -(far + near) / (far - near);
+    result.data[3][3] = 1.0f;
 
     return result;
 }

@@ -1,6 +1,8 @@
 #include <dlfcn.h>
 #include <sys/stat.h>
 
+#include "vulkan/vulkan_core.h"
+
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
@@ -9,9 +11,11 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <ctime>
 #include <iostream>
 
 #include "vkh_game.hpp"
+#include "vkh_renderer.hpp"
 
 #define InvalidCodePath assert("Invalid Code Path" && 0)
 
@@ -77,8 +81,8 @@ struct VulkanContext {
     VkQueue graphics_queue;
     VkQueue present_queue;
 
-    VkPhysicalDeviceFeatures device_features;
-    VkPhysicalDeviceProperties device_properties;
+    VkSurfaceKHR surface;
+    VkDebugUtilsMessengerEXT debug_messenger;
 
     // Swapchain
     VkSwapchainKHR old_swapchain = VK_NULL_HANDLE;
@@ -86,29 +90,41 @@ struct VulkanContext {
     VkFormat swapchain_format;
     VkExtent2D swapchain_extent;
     uint32_t swapchain_image_count;
-    VkImageView* swapchain_images;
 
-    // Framebuffer
-    VkFramebuffer* framebuffers;
+    // Buffers
+    VkBuffer vertex_buffer;
+    VkDeviceMemory vertex_buffer_memory;
+    VkBuffer index_buffer;
+    VkDeviceMemory index_buffer_memory;
+    VkBuffer instance_buffer;
+    VkDeviceMemory instance_buffer_memory;
+
+    VkBuffer* uniform_buffers;
+    VkDeviceMemory* uniform_buffers_memory;
+    void** uniform_buffers_mapped;
 
     VkCommandPool command_pool;
 
     const uint32_t MAX_FRAMES_IN_FLIGHT = 3;
 
+    VkImageView* swapchain_images;
     VkCommandBuffer* command_buffer;
-
+    VkFramebuffer* framebuffers;
     // Sync objects
-    VkSemaphore* imageAvailableSemaphore;
+    VkSemaphore* image_available_semaphore;
     VkSemaphore* renderFinishedSemaphore;
-    VkFence* inFlightFence;
-
-    VkSurfaceKHR surface;
-    VkDebugUtilsMessengerEXT debug_messenger;
+    VkFence* in_flight_fence;
 
     // Pipeline
+    VkDescriptorPool descriptor_pool;
+    VkDescriptorSetLayout descriptor_set_layout;
+    VkDescriptorSet* descriptor_sets;
     VkPipelineLayout pipeline_layout;
     VkRenderPass render_pass;
     VkPipeline graphics_pipeline;
+
+    VkPhysicalDeviceFeatures device_features;
+    VkPhysicalDeviceProperties device_properties;
 };
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL
@@ -225,6 +241,23 @@ my_file readfile(const char* path, memory_arena* arena) {
     return mf;
 }
 
+void CreateDescriptorSetLayout(VulkanContext* context, memory_arena* arena) {
+    VkDescriptorSetLayoutBinding uboLayoutBinding{};
+    uboLayoutBinding.binding = 0;
+    uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    uboLayoutBinding.descriptorCount = 1;
+
+    uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+    VkDescriptorSetLayoutCreateInfo layoutInfo{};
+    layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layoutInfo.bindingCount = 1;
+    layoutInfo.pBindings = &uboLayoutBinding;
+
+    vkCreateDescriptorSetLayout(context->device, &layoutInfo, nullptr,
+                                &context->descriptor_set_layout);
+}
+
 void CreateGraphicsPipeline(VulkanContext* context, memory_arena* arena) {
     temp_arena tmp = begin_temp_arena(arena);
 
@@ -281,6 +314,29 @@ void CreateGraphicsPipeline(VulkanContext* context, memory_arena* arena) {
     vertexInputInfo.sType =
         VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 
+    VkVertexInputBindingDescription Vertex2DbindingDescription{};
+    Vertex2DbindingDescription.binding = 0;
+    Vertex2DbindingDescription.stride = sizeof(Vertex2D);
+    Vertex2DbindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+    std::array<VkVertexInputAttributeDescription, 2> attributeDescriptions{};
+
+    attributeDescriptions[0].binding = 0;
+    attributeDescriptions[0].location = 0;
+    attributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
+    attributeDescriptions[0].offset = offsetof(Vertex2D, pos);
+
+    attributeDescriptions[1].binding = 0;
+    attributeDescriptions[1].location = 1;
+    attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+    attributeDescriptions[1].offset = offsetof(Vertex2D, color);
+
+    vertexInputInfo.vertexBindingDescriptionCount = 1;
+    vertexInputInfo.vertexAttributeDescriptionCount =
+        static_cast<uint32_t>(attributeDescriptions.size());
+    vertexInputInfo.pVertexBindingDescriptions = &Vertex2DbindingDescription;
+    vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
+
     VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
     inputAssembly.sType =
         VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -314,7 +370,7 @@ void CreateGraphicsPipeline(VulkanContext* context, memory_arena* arena) {
     rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
     rasterizer.lineWidth = 1.0f;
     rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
-    rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
+    rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     rasterizer.depthBiasEnable = VK_FALSE;
 
     VkPipelineMultisampleStateCreateInfo multisampling{};
@@ -339,6 +395,8 @@ void CreateGraphicsPipeline(VulkanContext* context, memory_arena* arena) {
 
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    pipelineLayoutInfo.setLayoutCount = 1;
+    pipelineLayoutInfo.pSetLayouts = &context->descriptor_set_layout;
 
     VkResult res = vkCreatePipelineLayout(context->device, &pipelineLayoutInfo,
                                           0, &context->pipeline_layout);
@@ -630,6 +688,225 @@ void CreateCommandPool(VulkanContext* context, memory_arena* arena) {
     assert(res == VK_SUCCESS);
 }
 
+uint32_t findMemoryType(VkPhysicalDevice phyical_devices, uint32_t typeFilter,
+                        VkMemoryPropertyFlags properties) {
+    VkPhysicalDeviceMemoryProperties memProperties;
+    vkGetPhysicalDeviceMemoryProperties(phyical_devices, &memProperties);
+
+    for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
+        if ((typeFilter & (1 << i)) &&
+            (memProperties.memoryTypes[i].propertyFlags & properties) ==
+                properties) {
+            return i;
+        }
+    }
+
+    InvalidCodePath;
+}
+
+void CopyBuffer(VulkanContext* context, VkBuffer srcBuffer, VkBuffer dstBuffer,
+                VkDeviceSize size) {
+    VkCommandBufferAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    allocInfo.commandPool = context->command_pool;
+    allocInfo.commandBufferCount = 1;
+
+    VkCommandBuffer commandBuffer;
+    vkAllocateCommandBuffers(context->device, &allocInfo, &commandBuffer);
+
+    VkCommandBufferBeginInfo beginInfo{};
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+    vkBeginCommandBuffer(commandBuffer, &beginInfo);
+
+    VkBufferCopy copyRegion{};
+    copyRegion.srcOffset = 0;  // Optional
+    copyRegion.dstOffset = 0;  // Optional
+    copyRegion.size = size;
+    vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
+
+    vkEndCommandBuffer(commandBuffer);
+
+    VkSubmitInfo submitInfo{};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &commandBuffer;
+
+    vkQueueSubmit(context->graphics_queue, 1, &submitInfo, VK_NULL_HANDLE);
+    vkQueueWaitIdle(context->graphics_queue);
+
+    vkFreeCommandBuffers(context->device, context->command_pool, 1,
+                         &commandBuffer);
+}
+
+void CreateBuffer(VulkanContext* context, VkDeviceSize size,
+                  VkBufferUsageFlags usage, VkMemoryPropertyFlags properties,
+                  VkBuffer& buffer, VkDeviceMemory& bufferMemory) {
+    VkBufferCreateInfo bufferInfo{};
+    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferInfo.size = size;
+    bufferInfo.usage = usage;
+    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+    vkCreateBuffer(context->device, &bufferInfo, nullptr, &buffer);
+
+    VkMemoryRequirements memRequirements;
+    vkGetBufferMemoryRequirements(context->device, buffer, &memRequirements);
+
+    VkMemoryAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocInfo.allocationSize = memRequirements.size;
+    allocInfo.memoryTypeIndex = findMemoryType(
+        context->physical_device, memRequirements.memoryTypeBits, properties);
+
+    vkAllocateMemory(context->device, &allocInfo, nullptr, &bufferMemory);
+
+    vkBindBufferMemory(context->device, buffer, bufferMemory, 0);
+}
+
+void CreateVertexBuffer(VulkanContext* context) {
+    const std::vector<Vertex2D> vertices = {
+        {{-0.5f, -0.5f}, {0.0f, 0.8f, 0.0f}},
+        {{0.5f, -0.5f}, {0.0f, 0.8f, 0.0f}},
+        {{0.5f, 0.5f}, {0.0f, 0.8f, 0.0f}},
+        {{-0.5f, 0.5f}, {0.0f, 0.8f, 0.0f}}};
+
+    VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
+
+    VkBuffer stagingBuffer;
+    VkDeviceMemory stagingBufferMemory;
+    CreateBuffer(context, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                     VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                 stagingBuffer, stagingBufferMemory);
+
+    void* data;
+    vkMapMemory(context->device, stagingBufferMemory, 0, bufferSize, 0, &data);
+    memcpy(data, vertices.data(), (size_t)bufferSize);
+    vkUnmapMemory(context->device, stagingBufferMemory);
+
+    CreateBuffer(
+        context, bufferSize,
+        VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, context->vertex_buffer,
+        context->vertex_buffer_memory);
+
+    CopyBuffer(context, stagingBuffer, context->vertex_buffer, bufferSize);
+}
+
+void CreateUniformBuffers(VulkanContext* context, memory_arena* arena) {
+    VkDeviceSize bufferSize = sizeof(UniformBufferObject);
+
+    context->uniform_buffers = (VkBuffer*)arena_push(
+        arena, sizeof(VkBuffer) * context->MAX_FRAMES_IN_FLIGHT);
+
+    context->uniform_buffers_memory = (VkDeviceMemory*)arena_push(
+        arena, sizeof(VkDeviceMemory) * context->MAX_FRAMES_IN_FLIGHT);
+
+    context->uniform_buffers_mapped = (void**)arena_push(
+        arena, sizeof(void*) * context->MAX_FRAMES_IN_FLIGHT);
+
+    for (size_t i = 0; i < context->MAX_FRAMES_IN_FLIGHT; i++) {
+        CreateBuffer(context, bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                         VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                     context->uniform_buffers[i],
+                     context->uniform_buffers_memory[i]);
+
+        vkMapMemory(context->device, context->uniform_buffers_memory[i], 0,
+                    bufferSize, 0, &context->uniform_buffers_mapped[i]);
+    }
+}
+
+void CreateDescriptorPool(VulkanContext* context) {
+    VkDescriptorPoolSize poolSize{};
+    poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    poolSize.descriptorCount = context->MAX_FRAMES_IN_FLIGHT;
+
+    VkDescriptorPoolCreateInfo poolInfo{};
+    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolInfo.poolSizeCount = 1;
+    poolInfo.pPoolSizes = &poolSize;
+    poolInfo.maxSets = context->MAX_FRAMES_IN_FLIGHT;
+
+    vkCreateDescriptorPool(context->device, &poolInfo, nullptr,
+                           &context->descriptor_pool);
+}
+
+void CreateDescriptorSets(VulkanContext* context, memory_arena* arena) {
+    VkDescriptorSetLayout* layouts = (VkDescriptorSetLayout*)arena_push(
+        arena, sizeof(VkDescriptorSetLayout) * context->MAX_FRAMES_IN_FLIGHT);
+    for (int i = 0; i < context->MAX_FRAMES_IN_FLIGHT; i++) {
+        layouts[i] = context->descriptor_set_layout;
+    }
+
+    VkDescriptorSetAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfo.descriptorPool = context->descriptor_pool;
+    allocInfo.descriptorSetCount = context->MAX_FRAMES_IN_FLIGHT;
+    allocInfo.pSetLayouts = layouts;
+
+    context->descriptor_sets = (VkDescriptorSet*)arena_push(
+        arena, sizeof(VkDescriptorSet) * context->MAX_FRAMES_IN_FLIGHT);
+
+    vkAllocateDescriptorSets(context->device, &allocInfo,
+                             context->descriptor_sets);
+
+    for (size_t i = 0; i < context->MAX_FRAMES_IN_FLIGHT; i++) {
+        VkDescriptorBufferInfo bufferInfo{};
+        bufferInfo.buffer = context->uniform_buffers[i];
+        bufferInfo.offset = 0;
+        bufferInfo.range = sizeof(UniformBufferObject);
+
+        VkWriteDescriptorSet descriptorWrite{};
+        descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrite.dstSet = context->descriptor_sets[i];
+        descriptorWrite.dstBinding = 0;
+        descriptorWrite.dstArrayElement = 0;
+
+        descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        descriptorWrite.descriptorCount = 1;
+
+        descriptorWrite.pBufferInfo = &bufferInfo;
+        descriptorWrite.pImageInfo = nullptr;        // Optional
+        descriptorWrite.pTexelBufferView = nullptr;  // Optional
+
+        vkUpdateDescriptorSets(context->device, 1, &descriptorWrite, 0,
+                               nullptr);
+    }
+}
+
+void CreateIndexBuffer(VulkanContext* context) {
+    const std::vector<uint32_t> indices = {0, 1, 2, 2, 3, 0};
+
+    VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
+
+    VkBuffer stagingBuffer;
+    VkDeviceMemory stagingBufferMemory;
+    CreateBuffer(context, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                     VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                 stagingBuffer, stagingBufferMemory);
+
+    void* data;
+    vkMapMemory(context->device, stagingBufferMemory, 0, bufferSize, 0, &data);
+    memcpy(data, indices.data(), (size_t)bufferSize);
+    vkUnmapMemory(context->device, stagingBufferMemory);
+
+    CreateBuffer(
+        context, bufferSize,
+        VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, context->index_buffer,
+        context->index_buffer_memory);
+
+    CopyBuffer(context, stagingBuffer, context->index_buffer, bufferSize);
+
+    vkDestroyBuffer(context->device, stagingBuffer, 0);
+    vkFreeMemory(context->device, stagingBufferMemory, 0);
+}
+
 void CreateCommandBuffer(VulkanContext* context, memory_arena* arena) {
     VkCommandBufferAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -689,7 +966,20 @@ void RecordCommandBuffer(VulkanContext* context, uint32_t image_index,
     scissor.extent = context->swapchain_extent;
     vkCmdSetScissor(context->command_buffer[current_frame], 0, 1, &scissor);
 
-    vkCmdDraw(context->command_buffer[current_frame], 3, 1, 0, 0);
+    VkBuffer vertexBuffers[] = {context->vertex_buffer};
+    VkDeviceSize offsets[] = {0};
+    vkCmdBindVertexBuffers(context->command_buffer[current_frame], 0, 1,
+                           vertexBuffers, offsets);
+
+    vkCmdBindIndexBuffer(context->command_buffer[current_frame],
+                         context->index_buffer, 0, VK_INDEX_TYPE_UINT32);
+
+    vkCmdBindDescriptorSets(
+        context->command_buffer[current_frame], VK_PIPELINE_BIND_POINT_GRAPHICS,
+        context->pipeline_layout, 0, 1,
+        &context->descriptor_sets[current_frame], 0, nullptr);
+
+    vkCmdDrawIndexed(context->command_buffer[current_frame], 6, 1, 0, 0, 0);
 
     vkCmdEndRenderPass(context->command_buffer[current_frame]);
 
@@ -705,20 +995,20 @@ void CreateSyncObjects(VulkanContext* context, memory_arena* arena) {
     // Fence is signalled first, so the drawFrame call can wait for it
     fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-    context->imageAvailableSemaphore = (VkSemaphore*)arena_push(
+    context->image_available_semaphore = (VkSemaphore*)arena_push(
         arena, sizeof(VkSemaphore) * context->MAX_FRAMES_IN_FLIGHT);
     context->renderFinishedSemaphore = (VkSemaphore*)arena_push(
         arena, sizeof(VkSemaphore) * context->MAX_FRAMES_IN_FLIGHT);
-    context->inFlightFence = (VkFence*)arena_push(
+    context->in_flight_fence = (VkFence*)arena_push(
         arena, sizeof(VkFence) * context->MAX_FRAMES_IN_FLIGHT);
 
     for (int i = 0; i < context->MAX_FRAMES_IN_FLIGHT; i++) {
         vkCreateSemaphore(context->device, &semaphoreInfo, nullptr,
-                          &context->imageAvailableSemaphore[i]);
+                          &context->image_available_semaphore[i]);
         vkCreateSemaphore(context->device, &semaphoreInfo, nullptr,
                           &context->renderFinishedSemaphore[i]);
         vkCreateFence(context->device, &fenceInfo, nullptr,
-                      &context->inFlightFence[i]);
+                      &context->in_flight_fence[i]);
     }
 }
 
@@ -820,6 +1110,25 @@ void renderer_init(VulkanContext* context, GLFWwindow* window,
     context->physical_device =
         ChooseDiscreteGPU(context, devices, device_count);
 
+    temp_arena tmparen = begin_temp_arena(renderer_arena);
+
+    uint32_t extensionCount;
+    vkEnumerateDeviceExtensionProperties(context->physical_device, 0,
+                                         &extensionCount, 0);
+    VkExtensionProperties* available_extensions =
+        (VkExtensionProperties*)arena_push(
+            tmparen.parent, sizeof(VkExtensionProperties) * extensionCount);
+
+    vkEnumerateDeviceExtensionProperties(context->physical_device, 0,
+                                         &extensionCount, available_extensions);
+
+    std::cerr << "Available device extension:\n";
+    for (uint32_t i = 0; i < extensionCount; i++) {
+        std::cerr << available_extensions[i].extensionName << '\n';
+    }
+
+    end_temp_arena(&tmparen);
+
     glfwCreateWindowSurface(context->instance, window, nullptr,
                             &context->surface);
 
@@ -890,31 +1199,58 @@ void renderer_init(VulkanContext* context, GLFWwindow* window,
     // 4. Swapchain
     CreateSwapchain(context, renderer_arena);
 
+    CreateDescriptorSetLayout(context, renderer_arena);
+    CreateDescriptorPool(context);
     CreateRenderPass(context);
-
     CreateGraphicsPipeline(context, renderer_arena);
-
     CreateFramebuffers(context, renderer_arena, false);
 
     CreateCommandPool(context, renderer_arena);
+
+    CreateVertexBuffer(context);
+    CreateIndexBuffer(context);
+    CreateUniformBuffers(context, renderer_arena);
+
+    CreateDescriptorSets(context, renderer_arena);
+
     CreateCommandBuffer(context, renderer_arena);
 
     CreateSyncObjects(context, renderer_arena);
 }
 
-void drawFrame(VulkanContext* context, memory_arena* arena,
-               GLFWwindow* window) {
-    static uint32_t currentFrame = 0;
+void UpdateUniformBuffer(VulkanContext* context, uint32_t frame_index) {
+    static double start = glfwGetTime();
 
-    vkWaitForFences(context->device, 1, &context->inFlightFence[currentFrame],
-                    VK_TRUE, UINT64_MAX);
-    vkResetFences(context->device, 1, &context->inFlightFence[currentFrame]);
+    UniformBufferObject ubo = {};
+    float angle = 90.0 * (M_PI / 180.0f);
 
-    uint32_t imageIndex;
+    ubo.view = lookAt(pos3{2.0f, 2.0f, 2.0f}, vec3{0.0f, 0.0f, 0.0f},
+                      vec3{0.0f, 0.0f, 1.0f});
+
+    ubo.proj = perspective(45.0f * (M_PI / 180.0f),
+                           (float)context->swapchain_extent.width /
+                               (float)context->swapchain_extent.height,
+                           0.1f, 10.0f);
+
+    double time = glfwGetTime() - start;
+    ubo.model = rotate(angle * time, vec3{0.0f, 0.0f, 1.0f});
+
+    memcpy(context->uniform_buffers_mapped[frame_index], &ubo, sizeof(ubo));
+}
+
+void drawFrame(VulkanContext* context, memory_arena* arena) {
+    static uint32_t current_frame = 0;
+
+    vkWaitForFences(context->device, 1,
+                    &context->in_flight_fence[current_frame], VK_TRUE,
+                    UINT64_MAX);
+    vkResetFences(context->device, 1, &context->in_flight_fence[current_frame]);
+
+    uint32_t image_index;
     VkResult image_result =
         vkAcquireNextImageKHR(context->device, context->swapchain, UINT64_MAX,
-                              context->imageAvailableSemaphore[currentFrame],
-                              VK_NULL_HANDLE, &imageIndex);
+                              context->image_available_semaphore[current_frame],
+                              VK_NULL_HANDLE, &image_index);
 
     if (image_result == VK_ERROR_OUT_OF_DATE_KHR) {
         RecreateSwapchainResorces(context, arena);
@@ -924,14 +1260,16 @@ void drawFrame(VulkanContext* context, memory_arena* arena,
         InvalidCodePath;
     }
 
-    vkResetCommandBuffer(context->command_buffer[currentFrame], 0);
-    RecordCommandBuffer(context, imageIndex, arena, currentFrame);
+    UpdateUniformBuffer(context, current_frame);
+
+    vkResetCommandBuffer(context->command_buffer[current_frame], 0);
+    RecordCommandBuffer(context, image_index, arena, current_frame);
 
     VkSubmitInfo submitInfo{};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
     VkSemaphore waitSemaphores[] = {
-        context->imageAvailableSemaphore[currentFrame]};
+        context->image_available_semaphore[current_frame]};
     VkPipelineStageFlags waitStages[] = {
         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
     submitInfo.waitSemaphoreCount = 1;
@@ -939,16 +1277,19 @@ void drawFrame(VulkanContext* context, memory_arena* arena,
     submitInfo.pWaitDstStageMask = waitStages;
 
     submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &context->command_buffer[currentFrame];
+    submitInfo.pCommandBuffers = &context->command_buffer[current_frame];
 
     VkSemaphore signalSemaphores[] = {
-        context->renderFinishedSemaphore[currentFrame]};
+        context->renderFinishedSemaphore[current_frame]};
     submitInfo.signalSemaphoreCount = 1;
     submitInfo.pSignalSemaphores = signalSemaphores;
 
     VkResult res = vkQueueSubmit(context->graphics_queue, 1, &submitInfo,
-                                 context->inFlightFence[currentFrame]);
-    assert(res == VK_SUCCESS);
+                                 context->in_flight_fence[current_frame]);
+
+    if (res != VK_SUCCESS) {
+        std::cerr << "Failed to submit draw command buffer: " << res << '\n';
+    }
 
     VkPresentInfoKHR presentInfo{};
     presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -959,7 +1300,7 @@ void drawFrame(VulkanContext* context, memory_arena* arena,
     VkSwapchainKHR swapChains[] = {context->swapchain};
     presentInfo.swapchainCount = 1;
     presentInfo.pSwapchains = swapChains;
-    presentInfo.pImageIndices = &imageIndex;
+    presentInfo.pImageIndices = &image_index;
 
     VkResult present_result =
         vkQueuePresentKHR(context->present_queue, &presentInfo);
@@ -971,7 +1312,7 @@ void drawFrame(VulkanContext* context, memory_arena* arena,
         InvalidCodePath;
     }
 
-    currentFrame = (currentFrame + 1) % context->MAX_FRAMES_IN_FLIGHT;
+    current_frame = (current_frame + 1) % context->MAX_FRAMES_IN_FLIGHT;
 }
 
 int main(int argc, char* argv[]) {
@@ -1035,7 +1376,7 @@ int main(int argc, char* argv[]) {
         }
 
         gameUpdateAndRender(&state, &input);
-        drawFrame(&context, &renderer_arena, window);
+        drawFrame(&context, &renderer_arena);
 
         uint64_t end_time = glfwGetTimerValue();
         double time_elapsed_seconds =

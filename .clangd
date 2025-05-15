@@ -1,2 +1,2 @@
 CompileFlags:
-  Add: [-g, --std=c++17, -Wall, -Ivendor, -Wno-unused-parameter, -Wno-unused-variable]
+  Add: [-g, --std=c++17, -Wall, -Ivendor, -Wno-unused-parameter, -Wno-unused-variable, -lglfw]
