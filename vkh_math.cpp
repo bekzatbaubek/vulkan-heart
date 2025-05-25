@@ -1,13 +1,6 @@
+#include "vkh_math.hpp"
+
 #include <cmath>
-
-struct vec2 {
-    float x, y;
-};
-struct vec3 {
-    float x, y, z;
-};
-
-typedef vec3 pos3;
 
 vec3 normalize(const vec3 &v) {
     float length = sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
@@ -37,22 +30,32 @@ vec3 operator+(const vec3 &a, const vec3 &b) {
 
 vec3 operator-(const vec3 &a, const vec3 &b) {
     return {a.x - b.x, a.y - b.y, a.z - b.z};
-}
-
-struct InstanceData {
-    vec3 position;
-    vec3 color;
-};
-
-struct mat4 {
-    float data[4][4] = {{0}};
 };
 
 mat4 identity() {
-    mat4 result;
+    mat4 result = {{{0.0f, 0.0f, 0.0f, 0.0f},
+                    {0.0f, 0.0f, 0.0f, 0.0f},
+                    {0.0f, 0.0f, 0.0f, 0.0f},
+                    {0.0f, 0.0f, 0.0f, 0.0f}}};
     for (int i = 0; i < 4; ++i) {
         result.data[i][i] = 1.0f;
     }
+    return result;
+}
+
+mat4 translate(float x, float y, float z) {
+    mat4 result = identity();
+    result.data[3][0] = x;
+    result.data[3][1] = y;
+    result.data[3][2] = z;
+    return result;
+}
+
+mat4 scale(float x, float y, float z) {
+    mat4 result = identity();
+    result.data[0][0] = x;
+    result.data[1][1] = y;
+    result.data[2][2] = z;
     return result;
 }
 
@@ -126,17 +129,20 @@ mat4 perspective(float fov, float aspect, float near, float far) {
     return result;
 }
 
-mat4 ortho(float left, float right, float bottom, float top, float near,
-           float far) {
-    mat4 result = identity();
+mat4 createOrthographicProjection(float left, float right, float bottom,
+                                  float top, float near, float far) {
+    mat4 result = {};
 
+    // Set diagonal elements
     result.data[0][0] = 2.0f / (right - left);
     result.data[1][1] = 2.0f / (top - bottom);
     result.data[2][2] = -2.0f / (far - near);
+    result.data[3][3] = 1.0f;
+
+    // Set translation data
     result.data[3][0] = -(right + left) / (right - left);
     result.data[3][1] = -(top + bottom) / (top - bottom);
     result.data[3][2] = -(far + near) / (far - near);
-    result.data[3][3] = 1.0f;
 
     return result;
 }

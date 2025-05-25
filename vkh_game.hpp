@@ -1,10 +1,55 @@
-#ifndef VKH_GAME_HPP
+#pragma once
+
+#include <stdint.h>
 
 #include <cstdint>
 
-struct game_input {};
+#include "vkh_math.cpp"
 
-struct game_memory {
+#define InvalidCodePath assert("Invalid Code Path" && 0)
+
+#define kilobytes(n) ((n) * 1024LL)
+#define megabytes(n) (kilobytes(n) * 1024LL)
+#define gigabytes(n) (megabytes(n) * 1024LL)
+
+struct key_state {
+    bool is_down;
+    bool was_down;
+    uint32_t num_of_presses;
+};
+
+enum key {
+    KEY_A,
+    KEY_B,
+    KEY_X,
+    KEY_Y,
+
+    D_UP,
+    D_DOWN,
+    D_LEFT,
+    D_RIGHT,
+
+    LEFT_BUMPER,
+    RIGHT_BUMPER,
+
+    SELECT,
+    START,
+
+    LEFT_STICK_BUTTON,
+    RIGHT_STICK_BUTTON,
+
+    KEYS_SIZE,
+};
+
+struct GameInput {
+    double seconds_passed_since_last_frame;
+    key_state digital_inputs[KEYS_SIZE];
+
+    float mouse_x;
+    float mouse_y;
+};
+
+struct GameMemory {
     uint64_t permanent_store_size;
     void *permanent_store;
 
@@ -12,11 +57,13 @@ struct game_memory {
     void *transient_store;
 };
 
-typedef void (*game_update_t)(game_memory *state, game_input *input);
+struct GameState {
+    bool is_initialised = false;
+    uint32_t rectangle_count = 0;
+};
+
+typedef void (*game_update_t)(GameMemory *state, GameInput *input);
 
 extern "C" {
-void game_update_and_render(game_memory *state, game_input *input);
+void game_update_and_render(GameMemory *state, GameInput *input);
 }
-
-#define VKH_GAME_HPP
-#endif
