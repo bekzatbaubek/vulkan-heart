@@ -1,31 +1,24 @@
-#include "image.hpp"
+#include "image.h"
 
-#include <cstdint>
 #include <cstdio>
-#include <stdexcept>
-
-struct Image {
-    uint64_t width, height, channels;
-    uint32_t *data;
-};
 
 Image loadBMP(const char *filename) {
-    Image image;
-    FILE *file = fopen(filename, "rb");
+    Image image = {0,0,0,0};
+
+    FILE *file = 0;
+
+    fopen_s(&file, filename, "rb");
     if (!file) {
         fprintf(stderr, "Error: could not open file %s\n", filename);
-        std::runtime_error("Failed!");
     }
 
     unsigned char header[54];
     if (fread(header, 1, 54, file) != 54) {
         fprintf(stderr, "Error: could not read BMP header\n");
-        std::runtime_error("Failed!");
     }
 
     if (header[0] != 'B' || header[1] != 'M') {
         fprintf(stderr, "Error: invalid BMP file\n");
-        std::runtime_error("Failed!");
     }
 
     int dataPos = *(int *)&(header[0x0A]);

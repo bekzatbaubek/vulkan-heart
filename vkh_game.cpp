@@ -1,7 +1,6 @@
-#include "vkh_game.hpp"
+#include "vkh_game.h"
 
 #include <cassert>
-
 void game_update_and_render(GameMemory *game_memory, GameInput *input) {
     // Implement game update and rendering logic here
 
@@ -16,7 +15,7 @@ void game_update_and_render(GameMemory *game_memory, GameInput *input) {
         // Example action when left key is pressed
         input->digital_inputs[D_LEFT].was_down = true;
 
-        game_state->rectangle_count++;
+        // game_state->rectangle_count++;
 
     } else {
         if (input->digital_inputs[D_LEFT].was_down) {

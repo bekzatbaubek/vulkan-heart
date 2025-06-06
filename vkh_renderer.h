@@ -2,7 +2,7 @@
 
 #include <sys/types.h>
 
-#include "vkh_math.hpp"
+#include "vkh_math.h"
 #include "vulkan/vulkan_core.h"
 
 struct Vertex {

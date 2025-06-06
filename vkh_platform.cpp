@@ -1,16 +1,20 @@
+#ifdef _WIN64
+#include <windows.h>
+#else
 #include <dlfcn.h>
+#endif
+
 #include <sys/stat.h>
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
 #include <cassert>
-#include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <ctime>
 
-#include "vkh_game.hpp"
+#include "vkh_game.h"
 #include "vkh_memory.cpp"
 #include "vkh_renderer.cpp"
 
@@ -40,6 +44,53 @@ void platform_handle_input(GLFWwindow* window, GameInput* input) {
         glfwGetKey(window, GLFW_KEY_ENTER) == GLFW_PRESS;
 }
 
+struct GameCode {
+#ifdef _WIN64
+    HMODULE so_handle;
+#else
+    void* so_handle;
+#endif
+    game_update_t gameUpdateAndRender;
+    time_t lastModified;
+};
+
+void platform_free_game_code(GameCode* gameCode) {
+#ifdef _WIN64
+    FreeLibrary(gameCode->so_handle);
+#else
+    dlclose(gameCode->so_handle);
+#endif
+}
+
+GameCode platform_load_game_code(const char* sourcePath) {
+    GameCode gameCode = {0, 0, 0};
+    gameCode.lastModified = getLastModified(sourcePath);
+
+#ifdef _WIN64
+    gameCode.so_handle = LoadLibrary(sourcePath);
+    assert(gameCode.so_handle);
+    gameCode.gameUpdateAndRender = (game_update_t)GetProcAddress(
+        gameCode.so_handle, "game_update_and_render");
+#else
+    gameCode.so_handle = dlopen(sourcePath, RTLD_NOW);
+    gameCode.gameUpdateAndRender =
+        (game_update_t)dlsym(gameCode.so_handle, "game_update_and_render");
+#endif
+    assert(gameCode.gameUpdateAndRender);
+
+    return gameCode;
+}
+
+void platform_reload_game_code(GameCode* gameCode, const char* sourcePath) {
+    time_t currentModified = getLastModified(sourcePath);
+    if (currentModified > gameCode->lastModified) {
+        gameCode->lastModified = currentModified;
+        platform_free_game_code(gameCode);
+        platform_load_game_code(sourcePath);
+        std::cerr << "Game code reloaded\n";
+    }
+}
+
 int main(int argc, char* argv[]) {
     int window_width = 800;
     int window_height = 600;
@@ -51,15 +102,15 @@ int main(int argc, char* argv[]) {
     GLFWwindow* window =
         glfwCreateWindow(window_width, window_height, "Vulkan Heart", 0, 0);
     assert(window);
+
     uint64_t timer_frequency = glfwGetTimerFrequency();
 
-    const char* sourcePath = "./build/lib.so";
-    game_update_t gameUpdateAndRender = 0;
-
-    void* so_handle = dlopen(sourcePath, RTLD_NOW);
-    gameUpdateAndRender =
-        (game_update_t)dlsym(so_handle, "game_update_and_render");
-    time_t lastModified = getLastModified(sourcePath);
+#ifdef _WIN64
+    const char* sourcePath = "vkh_game.dll";
+#else
+    const char* sourcePath = "vkh_game.so";
+#endif
+    GameCode gameCode = platform_load_game_code(sourcePath);
 
     MemoryArena renderer_arena = {0};
     arena_init(&renderer_arena, megabytes(128));
@@ -77,37 +128,26 @@ int main(int argc, char* argv[]) {
     GameInput input = {};
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
-
-        time_t currentModified = getLastModified(sourcePath);
-        if (currentModified > lastModified) {
-            lastModified = currentModified;
-
-            dlclose(so_handle);
-            so_handle = dlopen(sourcePath, RTLD_NOW);
-            gameUpdateAndRender =
-                (game_update_t)dlsym(so_handle, "game_update_and_render");
-        }
+        // Check if the game code needs to be reloaded
+        platform_reload_game_code(&gameCode, sourcePath);
 
         uint64_t start_time = glfwGetTimerValue();
         platform_handle_input(window, &input);
 
-        gameUpdateAndRender(&game_memory, &input);
-
+        gameCode.gameUpdateAndRender(&game_memory, &input);
         RendererDrawFrame(&context, &renderer_arena);
 
         uint64_t end_time = glfwGetTimerValue();
         double time_elapsed_seconds =
             ((double)end_time - (double)start_time) / timer_frequency;
 
-#if 0
-        std::cerr << "Elapsed time: " << time_elapsed_seconds * 1000.0f
-                  << "ms\n"
-                  << "FPS: " << 1.0f / (time_elapsed_seconds) << "\n";
-#endif
+        glfwSetWindowTitle(
+            window, ("Vulkan Heart - " +
+                     std::to_string(1.0f / time_elapsed_seconds) + " FPS")
+                        .c_str());
     }
 
-    dlclose(so_handle);
     vkDeviceWaitIdle(context.device);
-
+    platform_free_game_code(&gameCode);
     return 0;
 }

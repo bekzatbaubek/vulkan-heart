@@ -10,7 +10,7 @@ clang++ \
     -g \
     vkh_game.cpp \
     -shared \
-    -o ./build/lib.so
+    -o ./build/vkh_game.so
 
 clang++ \
     --std=c++17 \

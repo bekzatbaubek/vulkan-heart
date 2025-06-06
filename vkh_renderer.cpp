@@ -1,14 +1,20 @@
+#include <assert.h>
 #include <sys/stat.h>
 
-#include <cassert>
+#include <array>
+#include <cstdint>
 #include <iostream>
+#include <vector>
 
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
+// #define GLFW_INCLUDE_VULKAN
+#include <vulkan/vk_enum_string_helper.h>
+#include <vulkan/vulkan.h>
 
-#include "vkh_game.hpp"
+#include "GLFW/glfw3.h"
+#include "vkh_game.h"
 #include "vkh_memory.cpp"
-#include "vkh_renderer.hpp"
+#include "vkh_renderer.h"
+#include "vulkan/vulkan_core.h"
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL
 debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
@@ -43,6 +49,7 @@ queue_indices get_graphics_and_present_queue_indices(VulkanContext* context,
     for (uint32_t i = 0; i < queue_family_count; i++) {
         if (queue_families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
             *result.graphics = i;
+            continue;
         }
         uint32_t present_support;
         vkGetPhysicalDeviceSurfaceSupportKHR(
@@ -96,12 +103,14 @@ struct my_file {
 };
 
 my_file readfile(const char* path, MemoryArena* arena) {
-    FILE* f = fopen(path, "rb");
-    assert(f);
-    my_file mf;
+    FILE* f;
+    int res = fopen_s(&f, path, "rb");
+    assert(res == 0 && f != nullptr);
+    my_file mf = {0, 0};
 
     struct stat attr;
-    if (!stat(path, &attr)) {
+    int result = stat(path, &attr);
+    if (result == 0) {
         uint32_t file_size = attr.st_size;
         uint32_t padding = 0;
 
@@ -119,6 +128,7 @@ my_file readfile(const char* path, MemoryArena* arena) {
         mf.size = file_size + padding;
         mf.mem = file_in_mem;
     }
+    fclose(f);
 
     return mf;
 }
@@ -143,8 +153,8 @@ void CreateDescriptorSetLayout(VulkanContext* context, MemoryArena* arena) {
 void CreateGraphicsPipeline(VulkanContext* context, MemoryArena* arena) {
     temp_arena tmp = begin_temp_arena(arena);
 
-    my_file vert_shader_mf = readfile("./shaders/heart.vert.spv", arena);
-    my_file frag_shader_mf = readfile("./shaders/heart.frag.spv", arena);
+    my_file vert_shader_mf = readfile("shaders/heart.vert.spv", arena);
+    my_file frag_shader_mf = readfile("shaders/heart.frag.spv", arena);
 
     VkShaderModule vert_shader_module;
     VkShaderModule frag_shader_module;
@@ -370,7 +380,11 @@ void CreateSwapchain(VulkanContext* context, MemoryArena* parent_arena) {
         for (uint32_t i = 0; i < formatCount; ++i) {
             if (formats[i].format == VK_FORMAT_B8G8R8A8_SRGB &&
                 formats[i].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
-                std::cerr << "Found suitable format\n";
+                std::cerr << "Found suitable format"
+                          << string_VkFormat(formats[i].format)
+                          << " and colorspace: "
+                          << string_VkColorSpaceKHR(formats[i].colorSpace)
+                          << '\n';
                 surfaceFormat = formats[i];
                 break;
             }
@@ -439,6 +453,8 @@ void CreateSwapchain(VulkanContext* context, MemoryArena* parent_arena) {
         createInfo.pQueueFamilyIndices = queueFamilyIndices;
     } else {
         createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        createInfo.queueFamilyIndexCount = 1;
+        createInfo.pQueueFamilyIndices = queueFamilyIndices;
     }
 
     createInfo.preTransform = capabilities.currentTransform;
@@ -450,7 +466,6 @@ void CreateSwapchain(VulkanContext* context, MemoryArena* parent_arena) {
 
     VkResult res = vkCreateSwapchainKHR(context->device, &createInfo, 0,
                                         &context->swapchain);
-    assert(res == VK_SUCCESS);
 
     vkGetSwapchainImagesKHR(context->device, context->swapchain, &imageCount,
                             0);
@@ -488,8 +503,8 @@ void CreateSwapchain(VulkanContext* context, MemoryArena* parent_arena) {
         viewInfo.subresourceRange.baseArrayLayer = 0;
         viewInfo.subresourceRange.layerCount = 1;
 
-        res = vkCreateImageView(context->device, &viewInfo, nullptr,
-                                &context->swapchain_images[i]);
+        VkResult res = vkCreateImageView(context->device, &viewInfo, nullptr,
+                                         &context->swapchain_images[i]);
     }
 
     context->swapchain_format = surfaceFormat.format;
@@ -602,6 +617,7 @@ uint32_t findMemoryType(VkPhysicalDevice phyical_devices, uint32_t typeFilter,
     }
 
     InvalidCodePath;
+    return -1;
 }
 
 void CopyBuffer(VulkanContext* context, VkBuffer srcBuffer, VkBuffer dstBuffer,
@@ -991,9 +1007,11 @@ void RendererInit(VulkanContext* context, GLFWwindow* window,
         "VK_LAYER_KHRONOS_validation",
     };
 
-    const char* device_extensions[] = {
-        VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+    std::vector<const char*> device_extensions = {
+        VK_KHR_SWAPCHAIN_EXTENSION_NAME
+#ifdef __APPLE__
         "VK_KHR_portability_subset",
+#endif
     };
 
     VkApplicationInfo appInfo = {};
@@ -1036,18 +1054,23 @@ void RendererInit(VulkanContext* context, GLFWwindow* window,
     const char** glfwExtensions;
     glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
 
-    std::vector<const char*> extensions(glfwExtensions,
-                                        glfwExtensions + glfwExtensionCount);
+    std::vector<const char*> instance_extensions(
+        glfwExtensions, glfwExtensions + glfwExtensionCount);
 
 #ifndef NDEBUG
-    extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+    instance_extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 #endif
+
+#ifdef __APPLE__
     extensions.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+#endif
 
-    instance_info.enabledExtensionCount = extensions.size();
-    instance_info.ppEnabledExtensionNames = extensions.data();
+    instance_info.enabledExtensionCount = instance_extensions.size();
+    instance_info.ppEnabledExtensionNames = instance_extensions.data();
 
+#ifdef __APPLE__
     instance_info.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+#endif
 
     VkResult res = vkCreateInstance(&instance_info, 0, &context->instance);
     assert(res == VK_SUCCESS);
@@ -1079,6 +1102,22 @@ void RendererInit(VulkanContext* context, GLFWwindow* window,
 
     vkEnumerateDeviceExtensionProperties(context->physical_device, 0,
                                          &extensionCount, available_extensions);
+
+    uint32_t non_equal = device_extensions.size();
+    for (uint32_t i = 0; i < extensionCount; i++) {
+        for (const char* ext : device_extensions) {
+            if (strcmp(available_extensions[i].extensionName, ext) == 0) {
+                std::cerr << "Found extension: "
+                          << available_extensions[i].extensionName << '\n';
+                non_equal--;
+            }
+        }
+    }
+
+    if (non_equal > 0) {
+        std::cerr << "Not all required device extensions are supported!\n";
+        InvalidCodePath;
+    }
 
     end_temp_arena(&tmparen);
 
@@ -1133,21 +1172,26 @@ void RendererInit(VulkanContext* context, GLFWwindow* window,
 #ifndef NDEBUG
     device_info.enabledLayerCount = 1;
     device_info.ppEnabledLayerNames = validation_layers;
+#else
+    device_info.enabledLayerCount = 0;
 #endif
 
-    device_info.enabledExtensionCount = 2;
-    device_info.ppEnabledExtensionNames = device_extensions;
+    device_info.enabledExtensionCount = device_extensions.size();
+    device_info.ppEnabledExtensionNames = device_extensions.data();
 
     res = vkCreateDevice(context->physical_device, &device_info, 0,
-                         &context->device);
+        &context->device);
+    assert(res == VK_SUCCESS);
 
     vkGetDeviceQueue(context->device, *q_indices.graphics, 0,
                      &context->graphics_queue);
     vkGetDeviceQueue(context->device, *q_indices.present, 0,
                      &context->present_queue);
 
+    assert(context->graphics_queue != VK_NULL_HANDLE);
+    assert(context->present_queue != VK_NULL_HANDLE);
+
     end_temp_arena(&tmp);
-    assert(res == VK_SUCCESS);
 
     // 4. Swapchain
     CreateSwapchain(context, renderer_arena);

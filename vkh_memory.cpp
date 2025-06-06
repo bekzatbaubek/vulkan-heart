@@ -1,6 +1,6 @@
 #pragma once
 
-#include "vkh_memory.hpp"
+#include "vkh_memory.h"
 
 #include <cassert>
 

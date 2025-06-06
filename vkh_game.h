@@ -64,6 +64,5 @@ struct GameState {
 
 typedef void (*game_update_t)(GameMemory *state, GameInput *input);
 
-extern "C" {
+extern "C" __declspec(dllexport)
 void game_update_and_render(GameMemory *state, GameInput *input);
-}
