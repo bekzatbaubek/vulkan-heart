@@ -108,7 +108,7 @@ int main(int argc, char* argv[]) {
 #ifdef _WIN64
     const char* sourcePath = "vkh_game.dll";
 #else
-    const char* sourcePath = "vkh_game.so";
+    const char* sourcePath = "./build/vkh_game.so";
 #endif
     GameCode gameCode = platform_load_game_code(sourcePath);
 

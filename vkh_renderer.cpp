@@ -49,7 +49,6 @@ queue_indices get_graphics_and_present_queue_indices(VulkanContext* context,
     for (uint32_t i = 0; i < queue_family_count; i++) {
         if (queue_families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
             *result.graphics = i;
-            continue;
         }
         uint32_t present_support;
         vkGetPhysicalDeviceSurfaceSupportKHR(
@@ -103,9 +102,12 @@ struct my_file {
 };
 
 my_file readfile(const char* path, MemoryArena* arena) {
+#ifdef _WIN64
     FILE* f;
-    int res = fopen_s(&f, path, "rb");
-    assert(res == 0 && f != nullptr);
+    fopen_s(&f, path, "rb");
+#else
+    FILE* f = fopen(path, "rb");
+#endif
     my_file mf = {0, 0};
 
     struct stat attr;
@@ -1003,12 +1005,11 @@ void RecreateSwapchainResources(VulkanContext* context, MemoryArena* arena) {
 
 void RendererInit(VulkanContext* context, GLFWwindow* window,
                   MemoryArena* renderer_arena) {
-    const char* validation_layers[] = {
-        "VK_LAYER_KHRONOS_validation",
-    };
+    std::array<const char*, 1> validation_layers = {
+        "VK_LAYER_KHRONOS_validation"};
 
     std::vector<const char*> device_extensions = {
-        VK_KHR_SWAPCHAIN_EXTENSION_NAME
+        VK_KHR_SWAPCHAIN_EXTENSION_NAME,
 #ifdef __APPLE__
         "VK_KHR_portability_subset",
 #endif
@@ -1040,9 +1041,8 @@ void RendererInit(VulkanContext* context, GLFWwindow* window,
         VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
     debugCreateInfo.pfnUserCallback = debugCallback;
 
-    instance_info.enabledLayerCount =
-        sizeof(validation_layers) / sizeof(const char*);
-    instance_info.ppEnabledLayerNames = validation_layers;
+    instance_info.enabledLayerCount = validation_layers.size();
+    instance_info.ppEnabledLayerNames = validation_layers.data();
     instance_info.pNext = (VkDebugUtilsMessengerCreateInfoEXT*)&debugCreateInfo;
 
 #else
@@ -1054,15 +1054,19 @@ void RendererInit(VulkanContext* context, GLFWwindow* window,
     const char** glfwExtensions;
     glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
 
-    std::vector<const char*> instance_extensions(
-        glfwExtensions, glfwExtensions + glfwExtensionCount);
+    std::vector<const char*> instance_extensions;
+    instance_extensions.reserve(glfwExtensionCount + 2);
+    for (uint32_t i = 0; i < glfwExtensionCount; i++) {
+        instance_extensions.emplace_back(glfwExtensions[i]);
+    }
 
 #ifndef NDEBUG
-    instance_extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+    instance_extensions.emplace_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 #endif
 
 #ifdef __APPLE__
-    extensions.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+    instance_extensions.emplace_back(
+        VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
 #endif
 
     instance_info.enabledExtensionCount = instance_extensions.size();
@@ -1096,19 +1100,22 @@ void RendererInit(VulkanContext* context, GLFWwindow* window,
     uint32_t extensionCount;
     vkEnumerateDeviceExtensionProperties(context->physical_device, 0,
                                          &extensionCount, 0);
-    VkExtensionProperties* available_extensions =
+    VkExtensionProperties* available_device_extensions =
         (VkExtensionProperties*)arena_push(
             tmparen.parent, sizeof(VkExtensionProperties) * extensionCount);
 
     vkEnumerateDeviceExtensionProperties(context->physical_device, 0,
-                                         &extensionCount, available_extensions);
+                                         &extensionCount,
+                                         available_device_extensions);
 
     uint32_t non_equal = device_extensions.size();
     for (uint32_t i = 0; i < extensionCount; i++) {
         for (const char* ext : device_extensions) {
-            if (strcmp(available_extensions[i].extensionName, ext) == 0) {
+            if (strcmp(available_device_extensions[i].extensionName, ext) ==
+                0) {
                 std::cerr << "Found extension: "
-                          << available_extensions[i].extensionName << '\n';
+                          << available_device_extensions[i].extensionName
+                          << '\n';
                 non_equal--;
             }
         }
@@ -1170,8 +1177,8 @@ void RendererInit(VulkanContext* context, GLFWwindow* window,
     device_info.pEnabledFeatures = &deviceFeatures;
 
 #ifndef NDEBUG
-    device_info.enabledLayerCount = 1;
-    device_info.ppEnabledLayerNames = validation_layers;
+    device_info.enabledLayerCount = validation_layers.size();
+    device_info.ppEnabledLayerNames = validation_layers.data();
 #else
     device_info.enabledLayerCount = 0;
 #endif
@@ -1180,7 +1187,7 @@ void RendererInit(VulkanContext* context, GLFWwindow* window,
     device_info.ppEnabledExtensionNames = device_extensions.data();
 
     res = vkCreateDevice(context->physical_device, &device_info, 0,
-        &context->device);
+                         &context->device);
     assert(res == VK_SUCCESS);
 
     vkGetDeviceQueue(context->device, *q_indices.graphics, 0,
@@ -1217,11 +1224,7 @@ void RendererInit(VulkanContext* context, GLFWwindow* window,
 }
 
 void UpdateUniformBuffer(VulkanContext* context, uint32_t frame_index) {
-    static double start = glfwGetTime();
-
     UniformBufferObject ubo = {};
-
-    double time = glfwGetTime() - start;
 
     ubo.model = identity();
     ubo.view = identity();
