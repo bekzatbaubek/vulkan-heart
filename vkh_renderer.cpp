@@ -1,20 +1,18 @@
-#include <assert.h>
+#include "vkh_renderer.h"
+
+#include <GLFW/glfw3.h>
 #include <sys/stat.h>
+#include <vulkan/vk_enum_string_helper.h>
+#include <vulkan/vulkan.h>
 
 #include <array>
+#include <cassert>
 #include <cstdint>
 #include <iostream>
 #include <vector>
 
-// #define GLFW_INCLUDE_VULKAN
-#include <vulkan/vk_enum_string_helper.h>
-#include <vulkan/vulkan.h>
-
-#include "GLFW/glfw3.h"
 #include "vkh_game.h"
-#include "vkh_memory.cpp"
-#include "vkh_renderer.h"
-#include "vulkan/vulkan_core.h"
+#include "vkh_memory.h"
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL
 debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
@@ -344,7 +342,9 @@ void CreateGraphicsPipeline(VulkanContext* context, MemoryArena* arena) {
 
 void CreateSwapchain(VulkanContext* context, MemoryArena* parent_arena) {
     // Check whether the device meets requirements
-    VkSurfaceFormatKHR surfaceFormat;
+    VkSurfaceFormatKHR surfaceFormat = {
+        VK_FORMAT_UNDEFINED,
+    };
     VkSurfaceCapabilitiesKHR capabilities;
     VkPresentModeKHR presentMode = VK_PRESENT_MODE_FIFO_KHR;
     VkExtent2D extent;
@@ -362,9 +362,7 @@ void CreateSwapchain(VulkanContext* context, MemoryArena* parent_arena) {
         imageCount = capabilities.maxImageCount;
     }
 
-    // uint32_t imageCount = context->MAX_FRAMES_IN_FLIGHT;
-
-    std::cerr << "Engine Image Count" << imageCount << '\n';
+    std::cerr << "Engine Image Count: " << imageCount << '\n';
 
     uint32_t formatCount;
     vkGetPhysicalDeviceSurfaceFormatsKHR(context->physical_device,
@@ -380,8 +378,19 @@ void CreateSwapchain(VulkanContext* context, MemoryArena* parent_arena) {
             context->physical_device, context->surface, &formatCount, formats);
 
         for (uint32_t i = 0; i < formatCount; ++i) {
-            if (formats[i].format == VK_FORMAT_B8G8R8A8_SRGB &&
-                formats[i].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+            if (formats[i].colorSpace ==
+                VK_COLOR_SPACE_DISPLAY_P3_NONLINEAR_EXT) {
+                std::cerr << "Found format: "
+                          << string_VkFormat(formats[i].format)
+                          << " and colorspace: "
+                          << string_VkColorSpaceKHR(formats[i].colorSpace)
+                          << '\n';
+            }
+        }
+        for (uint32_t i = 0; i < formatCount; ++i) {
+            if (formats[i].format == VK_FORMAT_R16G16B16A16_SFLOAT &&
+                formats[i].colorSpace ==
+                    VK_COLOR_SPACE_DISPLAY_P3_NONLINEAR_EXT) {
                 std::cerr << "Found suitable format"
                           << string_VkFormat(formats[i].format)
                           << " and colorspace: "
@@ -390,6 +399,16 @@ void CreateSwapchain(VulkanContext* context, MemoryArena* parent_arena) {
                 surfaceFormat = formats[i];
                 break;
             }
+        }
+
+        if (surfaceFormat.format == VK_FORMAT_UNDEFINED) {
+            surfaceFormat.format = VK_FORMAT_B8G8R8A8_SRGB;
+            surfaceFormat.colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+            std::cerr << "No suitable format found, using default:"
+                      << string_VkFormat(surfaceFormat.format)
+                      << " colorspace: "
+                      << string_VkColorSpaceKHR(surfaceFormat.colorSpace)
+                      << '\n';
         }
     }
 
@@ -799,10 +818,10 @@ void CreateDescriptorSets(VulkanContext* context, MemoryArena* arena) {
 
 void CreateInstanceBuffer(VulkanContext* context) {
     std::vector<InstanceData> instances;
-    instances.reserve(5 * 5);
+    instances.reserve(10 * 10);
 
-    for (int i = 0; i < 5; i++) {
-        for (int j = 0; j < 5; j++) {
+    for (int i = 0; i < 10; i++) {
+        for (int j = 0; j < 10; j++) {
             InstanceData instance;
 
             float x = i * 1.0f;
@@ -816,9 +835,6 @@ void CreateInstanceBuffer(VulkanContext* context) {
             instances.emplace_back(instance);
         }
     }
-
-    instances[16].transform =
-        multiply(scale(200.0f, 190.0f, 1.0f), translate(20.0f, 20.0f, -0.1f));
 
     VkDeviceSize bufferSize = sizeof(instances[0]) * instances.size();
 
@@ -1000,13 +1016,15 @@ void RecreateSwapchainResources(VulkanContext* context, MemoryArena* arena) {
 
     CreateRenderPass(context);
 
-    // vkDestroySwapchainKHR(context->device, context->old_swapchain, nullptr);
+    // vkDestroySwapchainKHR(context->device, context->old_swapchain,
+    // nullptr);
 }
 
 void RendererInit(VulkanContext* context, GLFWwindow* window,
                   MemoryArena* renderer_arena) {
     std::array<const char*, 1> validation_layers = {
-        "VK_LAYER_KHRONOS_validation"};
+        "VK_LAYER_KHRONOS_validation",
+    };
 
     std::vector<const char*> device_extensions = {
         VK_KHR_SWAPCHAIN_EXTENSION_NAME,
@@ -1055,10 +1073,12 @@ void RendererInit(VulkanContext* context, GLFWwindow* window,
     glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
 
     std::vector<const char*> instance_extensions;
-    instance_extensions.reserve(glfwExtensionCount + 2);
+    instance_extensions.reserve(glfwExtensionCount + 10);
     for (uint32_t i = 0; i < glfwExtensionCount; i++) {
         instance_extensions.emplace_back(glfwExtensions[i]);
     }
+
+    instance_extensions.emplace_back("VK_EXT_swapchain_colorspace");
 
 #ifndef NDEBUG
     instance_extensions.emplace_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
@@ -1256,10 +1276,7 @@ void RendererDrawFrame(VulkanContext* context, MemoryArena* arena) {
 
     if (image_result == VK_ERROR_OUT_OF_DATE_KHR) {
         RecreateSwapchainResources(context, arena);
-        return;
-    } else if (image_result != VK_SUCCESS &&
-               image_result != VK_SUBOPTIMAL_KHR) {
-        InvalidCodePath;
+        // return;
     }
 
     UpdateUniformBuffer(context, current_frame);

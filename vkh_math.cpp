@@ -2,33 +2,33 @@
 
 #include <math.h>
 
-vec3 normalize(const vec3 &v) {
+inline vec3 normalize(const vec3 &v) {
     float length = sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
     return {v.x / length, v.y / length, v.z / length};
 }
 
-vec3 cross(const vec3 &a, const vec3 &b) {
+inline vec3 cross(const vec3 &a, const vec3 &b) {
     return {a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z,
             a.x * b.y - a.y * b.x};
 }
 
-float dot(const vec3 &a, const vec3 &b) {
+inline float dot(const vec3 &a, const vec3 &b) {
     return a.x * b.x + a.y * b.y + a.z * b.z;
 }
 
-vec3 operator*(const vec3 &v, float scalar) {
+inline vec3 operator*(const vec3 &v, float scalar) {
     return {v.x * scalar, v.y * scalar, v.z * scalar};
 }
 
-vec3 operator*(float scalar, const vec3 &v) {
+inline vec3 operator*(float scalar, const vec3 &v) {
     return {v.x * scalar, v.y * scalar, v.z * scalar};
 }
 
-vec3 operator+(const vec3 &a, const vec3 &b) {
+inline vec3 operator+(const vec3 &a, const vec3 &b) {
     return {a.x + b.x, a.y + b.y, a.z + b.z};
 }
 
-vec3 operator-(const vec3 &a, const vec3 &b) {
+inline vec3 operator-(const vec3 &a, const vec3 &b) {
     return {a.x - b.x, a.y - b.y, a.z - b.z};
 };
 

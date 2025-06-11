@@ -1,3 +1,4 @@
+#include <string>
 #ifdef _WIN64
 #include <windows.h>
 #else
@@ -128,23 +129,28 @@ int main(int argc, char* argv[]) {
     GameInput input = {};
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
+        double start_time = glfwGetTime();
         // Check if the game code needs to be reloaded
         platform_reload_game_code(&gameCode, sourcePath);
 
-        uint64_t start_time = glfwGetTimerValue();
         platform_handle_input(window, &input);
 
         gameCode.gameUpdateAndRender(&game_memory, &input);
         RendererDrawFrame(&context, &renderer_arena);
 
-        uint64_t end_time = glfwGetTimerValue();
-        double time_elapsed_seconds =
-            ((double)end_time - (double)start_time) / timer_frequency;
+        double end_time = glfwGetTime();
+        double time_elapsed_seconds = (end_time - start_time);
 
-        glfwSetWindowTitle(
-            window, ("Vulkan Heart - " +
-                     std::to_string(1.0f / time_elapsed_seconds) + " FPS")
-                        .c_str());
+        static uint32_t update_count = 0;
+        if (update_count++ % 3 == 0) {
+            glfwSetWindowTitle(
+                window,
+
+                ("Vulkan Heart - " +
+                 std::to_string(1.0f / time_elapsed_seconds) + " FPS" + " - " +
+                 std::to_string(time_elapsed_seconds * 1000.0f) + " ms")
+                    .c_str());
+        }
     }
 
     vkDeviceWaitIdle(context.device);

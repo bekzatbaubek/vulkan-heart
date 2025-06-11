@@ -1,7 +1,5 @@
 #pragma once
 
-#include <stdint.h>
-
 #include <cstdint>
 
 #include "vkh_math.cpp"
@@ -59,7 +57,6 @@ struct GameMemory {
 
 struct GameState {
     bool is_initialised = false;
-    uint32_t rectangle_count = 0;
 };
 
 typedef void (*game_update_t)(GameMemory *state, GameInput *input);
