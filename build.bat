@@ -5,7 +5,7 @@ mkdir build
 glslangValidator -V shaders\heart.vert -o shaders\heart.vert.spv
 glslangValidator -V shaders\heart.frag -o shaders\heart.frag.spv
 
-set COMMON_CXX_FLAGS=-std=c++17 -Wall -Wno-unused-variable -g
+set COMMON_CXX_FLAGS=-std=c++17 -Wall -Wno-unused-variable -g -fno-exceptions -fno-rtti
 
 clang++ ^
     %COMMON_CXX_FLAGS% ^
