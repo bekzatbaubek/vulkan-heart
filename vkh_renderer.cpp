@@ -24,6 +24,15 @@ debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
     return VK_FALSE;
 }
 
+struct VulkanSwapchainResources {
+    VkSwapchainKHR swapchain;
+    VkImage* swapchain_images;
+    VkImageView* swapchain_image_views;
+    VkFormat swapchain_format;
+    VkExtent2D swapchain_extent;
+    uint32_t swapchain_image_count;
+};
+
 queue_indices get_graphics_and_present_queue_indices(VulkanContext* context,
                                                      MemoryArena* arena) {
     queue_indices result = {0};
@@ -1028,10 +1037,15 @@ void RendererInit(VulkanContext* context, GLFWwindow* window,
 
     std::vector<const char*> device_extensions = {
         VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+        VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
+        VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME,
 #ifdef __APPLE__
         "VK_KHR_portability_subset",
 #endif
     };
+
+    uint32_t instance_api_version = 0;
+    vkEnumerateInstanceVersion(&instance_api_version);
 
     VkApplicationInfo appInfo = {};
     appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
@@ -1039,7 +1053,7 @@ void RendererInit(VulkanContext* context, GLFWwindow* window,
     appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
     appInfo.pEngineName = "No Engine";
     appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-    appInfo.apiVersion = VK_API_VERSION_1_2;
+    appInfo.apiVersion = instance_api_version;
 
     VkInstanceCreateInfo instance_info = {};
     instance_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -1078,7 +1092,12 @@ void RendererInit(VulkanContext* context, GLFWwindow* window,
         instance_extensions.emplace_back(glfwExtensions[i]);
     }
 
-    instance_extensions.emplace_back("VK_EXT_swapchain_colorspace");
+    instance_extensions.emplace_back(
+        VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME);
+    instance_extensions.emplace_back(
+        VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME);
+    instance_extensions.emplace_back(
+        VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME);
 
 #ifndef NDEBUG
     instance_extensions.emplace_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
@@ -1087,14 +1106,11 @@ void RendererInit(VulkanContext* context, GLFWwindow* window,
 #ifdef __APPLE__
     instance_extensions.emplace_back(
         VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+    instance_info.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
 #endif
 
     instance_info.enabledExtensionCount = instance_extensions.size();
     instance_info.ppEnabledExtensionNames = instance_extensions.data();
-
-#ifdef __APPLE__
-    instance_info.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
-#endif
 
     VkResult res = vkCreateInstance(&instance_info, 0, &context->instance);
     assert(res == VK_SUCCESS);
@@ -1186,15 +1202,39 @@ void RendererInit(VulkanContext* context, GLFWwindow* window,
         queueCreateInfos[1] = queueCreateInfo;
     }
 
-    VkPhysicalDeviceFeatures deviceFeatures{};
-    deviceFeatures.samplerAnisotropy = VK_TRUE;
-    deviceFeatures.sampleRateShading = VK_TRUE;
+    VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT
+        swapchain_maintenance1_features{
+            .sType =
+                VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_EXT,
 
-    VkDeviceCreateInfo device_info = {VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};
-    device_info.queueCreateInfoCount = number_of_unique_queues;
-    device_info.pQueueCreateInfos = queueCreateInfos;
+        };
 
-    device_info.pEnabledFeatures = &deviceFeatures;
+    VkPhysicalDeviceDynamicRenderingFeatures dynamic_rendering{
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES,
+        .pNext = &swapchain_maintenance1_features,
+    };
+
+    VkPhysicalDeviceFeatures2 physical_features2 = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+        .pNext = &dynamic_rendering,
+    };
+
+    vkGetPhysicalDeviceFeatures2(context->physical_device, &physical_features2);
+
+    if (dynamic_rendering.dynamicRendering == VK_FALSE) {
+        std::cerr << "Dynamic rendering is not supported by the GPU!\n";
+    }
+
+    if (swapchain_maintenance1_features.swapchainMaintenance1 == VK_FALSE) {
+        std::cerr << "Swapchain maintenance 1 is not supported by the GPU!\n";
+    }
+
+    VkDeviceCreateInfo device_info = {
+        .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+        .pNext = &physical_features2,
+        .queueCreateInfoCount = number_of_unique_queues,
+        .pQueueCreateInfos = queueCreateInfos,
+    };
 
 #ifndef NDEBUG
     device_info.enabledLayerCount = validation_layers.size();
