@@ -1,4 +1,4 @@
-    #include "vkh_renderer.h"
+#include "vkh_renderer.h"
 
 #include <GLFW/glfw3.h>
 #include <sys/stat.h>
@@ -12,7 +12,6 @@
 
 #include "vkh_game.h"
 #include "vkh_memory.h"
-#include "vulkan/vulkan_core.h"
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL
 debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
