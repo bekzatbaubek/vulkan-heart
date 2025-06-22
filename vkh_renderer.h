@@ -2,6 +2,9 @@
 
 #include <sys/types.h>
 
+#include <cstdint>
+#include <vector>
+
 #include "vkh_math.h"
 #include "vulkan/vulkan_core.h"
 
@@ -29,6 +32,22 @@ struct queue_indices {
     uint32_t* present;
 };
 
+struct VulkanSwapchainResources {
+    VkSwapchainKHR swapchain;
+    VkSwapchainKHR old_swapchain = VK_NULL_HANDLE;
+    uint32_t swapchain_image_count;
+    std::vector<VkImage> swapchain_images;
+    std::vector<VkImageView> swapchain_image_views;
+    VkFormat swapchain_format;
+    VkExtent2D swapchain_extent;
+};
+
+struct VulkanFuncTable {
+    PFN_vkCmdBeginRenderingKHR vkCmdBeginRenderingKHR = 0;
+    PFN_vkCmdEndRenderingKHR vkCmdEndRenderingKHR = 0;
+    PFN_vkCmdPipelineBarrier2KHR vkCmdPipelineBarrier2KHR = 0;
+};
+
 struct VulkanContext {
     VkInstance instance;
     VkPhysicalDevice physical_device;
@@ -39,6 +58,8 @@ struct VulkanContext {
     VkSurfaceKHR surface;
     VkDebugUtilsMessengerEXT debug_messenger;
 
+    VulkanFuncTable func_table;
+
     // Swapchain
     VkSwapchainKHR old_swapchain = VK_NULL_HANDLE;
     VkSwapchainKHR swapchain;
@@ -46,7 +67,6 @@ struct VulkanContext {
     VkExtent2D swapchain_extent;
     uint32_t swapchain_image_count;
 
-    // Buffers
     VkBuffer vertex_buffer;
     VkDeviceMemory vertex_buffer_memory;
     VkBuffer index_buffer;
@@ -62,9 +82,9 @@ struct VulkanContext {
 
     uint32_t MAX_FRAMES_IN_FLIGHT = 3;
 
-    VkImageView* swapchain_images;
+    VkImage* swapchain_images;
+    VkImageView* swapchain_image_views;
     VkCommandBuffer* command_buffer;
-    VkFramebuffer* framebuffers;
     // Sync objects
     VkSemaphore* image_available_semaphore;
     VkSemaphore* renderFinishedSemaphore;
@@ -75,9 +95,5 @@ struct VulkanContext {
     VkDescriptorSetLayout descriptor_set_layout;
     VkDescriptorSet* descriptor_sets;
     VkPipelineLayout pipeline_layout;
-    VkRenderPass render_pass;
     VkPipeline graphics_pipeline;
-
-    VkPhysicalDeviceFeatures device_features;
-    VkPhysicalDeviceProperties device_properties;
 };
