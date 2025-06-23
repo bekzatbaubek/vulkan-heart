@@ -976,9 +976,9 @@ void RecordCommandBuffer(VulkanContext* context, uint32_t image_index,
                           context->swapchain_images[image_index],
                           VK_IMAGE_LAYOUT_UNDEFINED,
                           VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 0,
-                          VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-                          VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
-                          VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
+                          VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+                          VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                          VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
 
     VkClearValue clear_value = {
         .color = {{0.0f, 0.0f, 0.0f, 1.0f}},
@@ -1117,6 +1117,7 @@ void RendererInit(VulkanContext* context, GLFWwindow* window,
         VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
         VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME,
         VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME,
+        VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME,
 #ifdef __APPLE__
         "VK_KHR_portability_subset",
 #endif
@@ -1282,9 +1283,16 @@ void RendererInit(VulkanContext* context, GLFWwindow* window,
         queueCreateInfos[1] = queueCreateInfo;
     }
 
+    VkPhysicalDeviceExtendedDynamicStateFeaturesEXT extended_dynamic_state_features{
+        .sType =
+            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT,
+        .pNext = 0,
+    };
+
     VkPhysicalDeviceSynchronization2FeaturesKHR sync2_features{
         .sType =
             VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES_KHR,
+        .pNext = &extended_dynamic_state_features,
     };
 
     VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT
@@ -1325,11 +1333,23 @@ void RendererInit(VulkanContext* context, GLFWwindow* window,
     if (physical_features2.features.sampleRateShading == VK_FALSE) {
         std::cerr << "Sample rate shading is not supported by the GPU!\n";
     }
+    if (extended_dynamic_state_features.extendedDynamicState == VK_FALSE) {
+        std::cerr << "Extended dynamic state is not supported by the GPU!\n";
+    }
+
+    VkPhysicalDeviceExtendedDynamicStateFeaturesEXT
+        enabled_extended_dynamic_state_features{
+            .sType =
+                VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT,
+            .pNext = 0,
+            .extendedDynamicState = VK_TRUE,
+        };
 
     VkPhysicalDeviceSynchronization2FeaturesKHR enable_sync2_features{
         .sType =
             VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES_KHR,
         .synchronization2 = VK_TRUE,
+        .pNext = &enabled_extended_dynamic_state_features,
     };
 
     VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT
