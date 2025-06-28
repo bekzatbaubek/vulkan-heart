@@ -8,7 +8,7 @@ layout(binding = 0) uniform UniformBufferObject {
 
 layout(location = 0) in vec2 inPosition;
 
-layout(location = 1) in mat4 instanceTransform; // Instance transform (takes 4 attribute slots)
+layout(location = 1) in mat4 instanceTransform;
 layout(location = 5) in vec3 instanceColor;
 
 layout(location = 0) out vec3 fragColor;

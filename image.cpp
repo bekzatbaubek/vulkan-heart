@@ -3,11 +3,16 @@
 #include <cstdio>
 
 Image loadBMP(const char *filename) {
-    Image image = {0,0,0,0};
+    Image image = {0, 0, 0, 0};
 
     FILE *file = 0;
 
+#if _WIN64
     fopen_s(&file, filename, "rb");
+#else
+    file = fopen(filename, "rb");
+#endif
+
     if (!file) {
         fprintf(stderr, "Error: could not open file %s\n", filename);
     }
@@ -45,8 +50,7 @@ Image loadBMP(const char *filename) {
             uint8_t G = fgetc(file);
             uint8_t R = fgetc(file);
             uint8_t A = 255;
-            // std::cerr << "R: " << (int)R << " G: " << (int)G << " B: " <<
-            // (int)B << '\n'; uint8_t A = fgetc(file);
+
             image.data[i] = (A << 24) | (B << 16) | (G << 8) | R;
         }
     }

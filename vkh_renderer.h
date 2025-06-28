@@ -60,7 +60,6 @@ struct VulkanContext {
 
     VulkanFuncTable func_table;
 
-    // Swapchain
     VkSwapchainKHR old_swapchain = VK_NULL_HANDLE;
     VkSwapchainKHR swapchain;
     VkFormat swapchain_format;
@@ -85,12 +84,11 @@ struct VulkanContext {
     VkImage* swapchain_images;
     VkImageView* swapchain_image_views;
     VkCommandBuffer* command_buffer;
-    // Sync objects
-    VkSemaphore* image_available_semaphore;
+
+    VkSemaphore* image_acquire_semaphore;
     VkSemaphore* renderFinishedSemaphore;
     VkFence* in_flight_fence;
 
-    // Pipeline
     VkDescriptorPool descriptor_pool;
     VkDescriptorSetLayout descriptor_set_layout;
     VkDescriptorSet* descriptor_sets;

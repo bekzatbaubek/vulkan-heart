@@ -25,7 +25,6 @@ time_t getLastModified(const char* path) {
 }
 
 void platform_handle_input(GLFWwindow* window, GameInput* input) {
-    // Keyboard input for test
     input->digital_inputs[D_LEFT].is_down =
         glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS;
 
@@ -130,7 +129,7 @@ int main(int argc, char* argv[]) {
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
         double start_time = glfwGetTime();
-        // Check if the game code needs to be reloaded
+
         platform_reload_game_code(&gameCode, sourcePath);
 
         platform_handle_input(window, &input);

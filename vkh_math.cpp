@@ -119,8 +119,7 @@ mat4 perspective(float fov, float aspect, float znear, float zfar) {
     float tanHalfFov = tan(fov / 2.0f);
 
     result.data[0][0] = 1.0f / (aspect * tanHalfFov);
-    result.data[1][1] =
-        -1.0f / tanHalfFov;  // Note the negative sign for Y-flip
+    result.data[1][1] = -1.0f / tanHalfFov;
     result.data[2][2] = zfar / (znear - zfar);
     result.data[2][3] = -1.0f;
     result.data[3][2] = -(zfar * znear) / (zfar - znear);
@@ -133,13 +132,11 @@ mat4 createOrthographicProjection(float left, float right, float bottom,
                                   float top, float znear, float zfar) {
     mat4 result = {};
 
-    // Set diagonal elements
     result.data[0][0] = 2.0f / (right - left);
     result.data[1][1] = 2.0f / (top - bottom);
     result.data[2][2] = -2.0f / (zfar - znear);
     result.data[3][3] = 1.0f;
 
-    // Set translation data
     result.data[3][0] = -(right + left) / (right - left);
     result.data[3][1] = -(top + bottom) / (top - bottom);
     result.data[3][2] = -(zfar + znear) / (zfar - znear);

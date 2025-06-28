@@ -12,6 +12,9 @@
 
 #include "vkh_game.h"
 #include "vkh_memory.h"
+#include "vulkan/vulkan_core.h"
+
+#define ArrayCount(x) (sizeof(x) / sizeof((x)[0]))
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL
 debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
@@ -220,20 +223,17 @@ void CreateGraphicsPipeline(VulkanContext* context, MemoryArena* arena) {
     attributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
     attributeDescriptions[0].offset = offsetof(Vertex2D, pos);
 
-    // Instance transform matrix - 4 vec4 rows (locations 1-4)
     for (int i = 0; i < 4; i++) {
         attributeDescriptions[1 + i].binding = 1;
         attributeDescriptions[1 + i].location = 1 + i;
         attributeDescriptions[1 + i].format = VK_FORMAT_R32G32B32A32_SFLOAT;
-        attributeDescriptions[1 + i].offset =
-            i * sizeof(float) * 4;  // 16 bytes per row
+        attributeDescriptions[1 + i].offset = i * sizeof(float) * 4;
     }
 
-    // Instance color (location 5)
     attributeDescriptions[5].binding = 1;
     attributeDescriptions[5].location = 5;
     attributeDescriptions[5].format = VK_FORMAT_R32G32B32_SFLOAT;
-    attributeDescriptions[5].offset = sizeof(float) * 16;  // After the matrix
+    attributeDescriptions[5].offset = sizeof(float) * 16;
 
     vertexInputInfo.vertexBindingDescriptionCount = bindingDescriptions.size();
     vertexInputInfo.vertexAttributeDescriptionCount =
@@ -342,7 +342,6 @@ void CreateGraphicsPipeline(VulkanContext* context, MemoryArena* arena) {
 }
 
 void CreateSwapchain(VulkanContext* context, MemoryArena* parent_arena) {
-    // Check whether the device meets requirements
     VkSurfaceFormatKHR surfaceFormat = {
         VK_FORMAT_UNDEFINED,
     };
@@ -433,8 +432,6 @@ void CreateSwapchain(VulkanContext* context, MemoryArena* parent_arena) {
             }
             if (presentModes[i] == VK_PRESENT_MODE_IMMEDIATE_KHR) {
                 std::cerr << "Found immediate present mode\n";
-                // presentMode = presentModes[i];
-                // break;
             }
         }
     }
@@ -502,7 +499,6 @@ void CreateSwapchain(VulkanContext* context, MemoryArena* parent_arena) {
     context->swapchain_image_count = imageCount;
 
     if (context->old_swapchain) {
-        // Recreating swapchain, no need to realloc memory
     } else {
         context->swapchain_image_views = (VkImageView*)arena_push(
             parent_arena, imageCount * sizeof(VkImageView));
@@ -535,82 +531,6 @@ void CreateSwapchain(VulkanContext* context, MemoryArena* parent_arena) {
     std::cerr << "Swapchain extent: " << context->swapchain_extent.width << ", "
               << context->swapchain_extent.height << '\n';
 }
-
-// void CreateRenderPass(VulkanContext* context) {
-//     VkAttachmentDescription color_attachment{};
-
-//     color_attachment.format = context->swapchain_format;
-//     color_attachment.samples = VK_SAMPLE_COUNT_1_BIT;
-//     color_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-//     color_attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-
-//     color_attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-//     color_attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-//     color_attachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-//     color_attachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-
-//     VkAttachmentReference colorAttachmentRef{};
-//     colorAttachmentRef.attachment = 0;
-//     colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-//     VkSubpassDescription subpass{};
-//     subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-
-//     subpass.colorAttachmentCount = 1;
-//     subpass.pColorAttachments = &colorAttachmentRef;
-
-//     VkSubpassDependency dependency{};
-//     dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-//     dependency.dstSubpass = 0;
-
-//     dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-//     dependency.srcAccessMask = 0;
-
-//     dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-//     dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-
-//     VkRenderPassCreateInfo renderPassInfo{};
-//     renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-//     renderPassInfo.attachmentCount = 1;
-//     renderPassInfo.pAttachments = &color_attachment;
-//     renderPassInfo.subpassCount = 1;
-//     renderPassInfo.pSubpasses = &subpass;
-//     renderPassInfo.dependencyCount = 1;
-//     renderPassInfo.pDependencies = &dependency;
-
-//     VkResult res = vkCreateRenderPass(context->device, &renderPassInfo,
-//     nullptr,
-//                                       &context->render_pass);
-
-//     assert(res == VK_SUCCESS);
-// }
-
-// void CreateFramebuffers(VulkanContext* context, MemoryArena* arena,
-//                         bool recreate) {
-//     if (recreate) {
-//     } else {
-//         context->framebuffers = (VkFramebuffer*)arena_push(
-//             arena, sizeof(VkFramebuffer) * context->swapchain_image_count);
-//     }
-
-//     for (uint32_t i = 0; i < context->swapchain_image_count; i++) {
-//         VkImageView attachments[] = {context->swapchain_image_views[i]};
-
-//         VkFramebufferCreateInfo framebufferInfo{};
-//         framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-//         framebufferInfo.renderPass = context->render_pass;
-//         framebufferInfo.attachmentCount = 1;
-//         framebufferInfo.pAttachments = attachments;
-//         framebufferInfo.width = context->swapchain_extent.width;
-//         framebufferInfo.height = context->swapchain_extent.height;
-//         framebufferInfo.layers = 1;
-
-//         VkResult res = vkCreateFramebuffer(context->device, &framebufferInfo,
-//                                            nullptr,
-//                                            &context->framebuffers[i]);
-//         assert(res == VK_SUCCESS);
-//     }
-// }
 
 void CreateCommandPool(VulkanContext* context, MemoryArena* arena) {
     queue_indices q_idxs =
@@ -662,8 +582,8 @@ void CopyBuffer(VulkanContext* context, VkBuffer srcBuffer, VkBuffer dstBuffer,
     vkBeginCommandBuffer(commandBuffer, &beginInfo);
 
     VkBufferCopy copyRegion{};
-    copyRegion.srcOffset = 0;  // Optional
-    copyRegion.dstOffset = 0;  // Optional
+    copyRegion.srcOffset = 0;
+    copyRegion.dstOffset = 0;
     copyRegion.size = size;
     vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
 
@@ -811,8 +731,8 @@ void CreateDescriptorSets(VulkanContext* context, MemoryArena* arena) {
         descriptorWrite.descriptorCount = 1;
 
         descriptorWrite.pBufferInfo = &bufferInfo;
-        descriptorWrite.pImageInfo = nullptr;        // Optional
-        descriptorWrite.pTexelBufferView = nullptr;  // Optional
+        descriptorWrite.pImageInfo = nullptr;
+        descriptorWrite.pTexelBufferView = nullptr;
 
         vkUpdateDescriptorSets(context->device, 1, &descriptorWrite, 0,
                                nullptr);
@@ -916,48 +836,42 @@ void TransitionImageLayout(VulkanContext* context, VkCommandBuffer cmd,
                            VkImageLayout newLayout,
                            VkAccessFlags2 srcAccessMask,
                            VkAccessFlags2 dstAccessMask,
-                           VkPipelineStageFlags2 srcStage,
-                           VkPipelineStageFlags2 dstStage) {
+                           VkPipelineStageFlags2 srcStageMask,
+                           VkPipelineStageFlags2 dstStageMask) {
     VkImageMemoryBarrier2KHR image_barrier{
         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2_KHR,
 
-        // Specify the pipeline stages and access masks for the barrier
-        .srcStageMask = srcStage,        // Source pipeline stage mask
-        .srcAccessMask = srcAccessMask,  // Source access mask
-        .dstStageMask = dstStage,        // Destination pipeline stage mask
-        .dstAccessMask = dstAccessMask,  // Destination access mask
+        .srcStageMask = srcStageMask,
+        .srcAccessMask = srcAccessMask,
+        .dstStageMask = dstStageMask,
+        .dstAccessMask = dstAccessMask,
 
-        // Specify the old and new layouts of the image
-        .oldLayout = oldLayout,  // Current layout of the image
-        .newLayout = newLayout,  // Target layout of the image
+        .oldLayout = oldLayout,
+        .newLayout = newLayout,
 
-        // We are not changing the ownership between queues
         .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
         .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
 
-        // Specify the image to be affected by this barrier
         .image = image,
 
-        // Define the subresource range (which parts of the image are affected)
-        .subresourceRange = {
-            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,  // Affects the color
-                                                      // aspect of the image
-            .baseMipLevel = 0,                        // Start at mip level 0
-            .levelCount = 1,      // Number of mip levels affected
-            .baseArrayLayer = 0,  // Start at array layer 0
-            .layerCount = 1       // Number of array layers affected
-        }};
+        .subresourceRange =
+            {
+                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
 
-    // Initialize the VkDependencyInfo structure
-    VkDependencyInfo dependency_info{
-        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-        .dependencyFlags = 0,          // No special dependency flags
-        .imageMemoryBarrierCount = 1,  // Number of image memory barriers
-        .pImageMemoryBarriers =
-            &image_barrier  // Pointer to the image memory barrier(s)
+                .baseMipLevel = 0,
+                .levelCount = 1,
+                .baseArrayLayer = 0,
+                .layerCount = 1,
+            },
     };
 
-    // Record the pipeline barrier into the command buffer
+    VkDependencyInfo dependency_info{
+        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .dependencyFlags = 0,
+        .imageMemoryBarrierCount = 1,
+        .pImageMemoryBarriers = &image_barrier,
+    };
+
     context->func_table.vkCmdPipelineBarrier2KHR(cmd, &dependency_info);
 }
 
@@ -969,8 +883,6 @@ void RecordCommandBuffer(VulkanContext* context, uint32_t image_index,
     VkResult res = vkBeginCommandBuffer(context->command_buffer[current_frame],
                                         &beginInfo);
     assert(res == VK_SUCCESS);
-
-    // Transition image layout
 
     TransitionImageLayout(context, context->command_buffer[current_frame],
                           context->swapchain_images[image_index],
@@ -1053,7 +965,6 @@ void RecordCommandBuffer(VulkanContext* context, uint32_t image_index,
     context->func_table.vkCmdEndRenderingKHR(
         context->command_buffer[current_frame]);
 
-    // Transition for present
     //
     TransitionImageLayout(context, context->command_buffer[current_frame],
                           context->swapchain_images[image_index],
@@ -1061,7 +972,7 @@ void RecordCommandBuffer(VulkanContext* context, uint32_t image_index,
                           VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
                           VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT, 0,
                           VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                          VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT);
+                          VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT);
 
     res = vkEndCommandBuffer(context->command_buffer[current_frame]);
     assert(res == VK_SUCCESS);
@@ -1072,10 +983,10 @@ void CreateSyncObjects(VulkanContext* context, MemoryArena* arena) {
     semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
     VkFenceCreateInfo fenceInfo{};
     fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-    // Fence is signalled first, so the drawFrame call can wait for it
+
     fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-    context->image_available_semaphore = (VkSemaphore*)arena_push(
+    context->image_acquire_semaphore = (VkSemaphore*)arena_push(
         arena, sizeof(VkSemaphore) * context->MAX_FRAMES_IN_FLIGHT);
     context->renderFinishedSemaphore = (VkSemaphore*)arena_push(
         arena, sizeof(VkSemaphore) * context->MAX_FRAMES_IN_FLIGHT);
@@ -1084,7 +995,7 @@ void CreateSyncObjects(VulkanContext* context, MemoryArena* arena) {
 
     for (int i = 0; i < context->MAX_FRAMES_IN_FLIGHT; i++) {
         vkCreateSemaphore(context->device, &semaphoreInfo, nullptr,
-                          &context->image_available_semaphore[i]);
+                          &context->image_acquire_semaphore[i]);
         vkCreateSemaphore(context->device, &semaphoreInfo, nullptr,
                           &context->renderFinishedSemaphore[i]);
         vkCreateFence(context->device, &fenceInfo, nullptr,
@@ -1203,7 +1114,6 @@ void RendererInit(VulkanContext* context, GLFWwindow* window,
     vkCreateDebugUtilsMessengerEXT(context->instance, &debugCreateInfo, nullptr,
                                    &context->debug_messenger);
 
-    // 2. Physical Device
     uint32_t device_count = 0;
     vkEnumeratePhysicalDevices(context->instance, &device_count, 0);
     VkPhysicalDevice* devices = (VkPhysicalDevice*)arena_push(
@@ -1247,8 +1157,6 @@ void RendererInit(VulkanContext* context, GLFWwindow* window,
 
     glfwCreateWindowSurface(context->instance, window, nullptr,
                             &context->surface);
-
-    // 3. Logical Device
 
     queue_indices q_indices =
         get_graphics_and_present_queue_indices(context, renderer_arena);
@@ -1462,40 +1370,49 @@ void RendererDrawFrame(VulkanContext* context, MemoryArena* arena) {
                     UINT64_MAX);
     vkResetFences(context->device, 1, &context->in_flight_fence[current_frame]);
 
-    uint32_t image_index;
+    uint32_t swapchain_image_index;
     VkResult image_result =
         vkAcquireNextImageKHR(context->device, context->swapchain, UINT64_MAX,
-                              context->image_available_semaphore[current_frame],
-                              VK_NULL_HANDLE, &image_index);
+                              context->image_acquire_semaphore[current_frame],
+                              VK_NULL_HANDLE, &swapchain_image_index);
+
+    std::cerr << "Swapchain: Image index: " << swapchain_image_index << '\n';
 
     if (image_result == VK_ERROR_OUT_OF_DATE_KHR) {
         RecreateSwapchainResources(context, arena);
-        // return;
     }
 
     UpdateUniformBuffer(context, current_frame);
 
-    vkResetCommandBuffer(context->command_buffer[current_frame], 0);
-    RecordCommandBuffer(context, image_index, arena, current_frame);
-
-    VkSubmitInfo submitInfo{};
-    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    vkResetCommandPool(context->device, context->command_pool, 0);
+    RecordCommandBuffer(context, swapchain_image_index, arena, current_frame);
 
     VkSemaphore waitSemaphores[] = {
-        context->image_available_semaphore[current_frame]};
+        context->image_acquire_semaphore[current_frame],
+    };
     VkPipelineStageFlags waitStages[] = {
-        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
-    submitInfo.waitSemaphoreCount = 1;
-    submitInfo.pWaitSemaphores = waitSemaphores;
-    submitInfo.pWaitDstStageMask = waitStages;
-
-    submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &context->command_buffer[current_frame];
-
+        VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+    };
     VkSemaphore signalSemaphores[] = {
-        context->renderFinishedSemaphore[current_frame]};
-    submitInfo.signalSemaphoreCount = 1;
-    submitInfo.pSignalSemaphores = signalSemaphores;
+        context->renderFinishedSemaphore[current_frame],
+    };
+    VkCommandBuffer commandBuffers[] = {
+        context->command_buffer[current_frame],
+    };
+
+    VkSubmitInfo submitInfo{
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+
+        .waitSemaphoreCount = ArrayCount(waitSemaphores),
+        .pWaitSemaphores = waitSemaphores,
+        .pWaitDstStageMask = waitStages,
+
+        .commandBufferCount = ArrayCount(commandBuffers),
+        .pCommandBuffers = commandBuffers,
+
+        .signalSemaphoreCount = ArrayCount(signalSemaphores),
+        .pSignalSemaphores = signalSemaphores,
+    };
 
     VkResult res = vkQueueSubmit(context->graphics_queue, 1, &submitInfo,
                                  context->in_flight_fence[current_frame]);
@@ -1504,16 +1421,19 @@ void RendererDrawFrame(VulkanContext* context, MemoryArena* arena) {
         std::cerr << "Failed to submit draw command buffer: " << res << '\n';
     }
 
-    VkPresentInfoKHR presentInfo{};
-    presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-
-    presentInfo.waitSemaphoreCount = 1;
-    presentInfo.pWaitSemaphores = signalSemaphores;
-
     VkSwapchainKHR swapChains[] = {context->swapchain};
-    presentInfo.swapchainCount = 1;
-    presentInfo.pSwapchains = swapChains;
-    presentInfo.pImageIndices = &image_index;
+
+    VkPresentInfoKHR presentInfo{
+        .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+
+        .waitSemaphoreCount = 1,
+        .pWaitSemaphores = signalSemaphores,
+
+        .swapchainCount = 1,
+        .pSwapchains = swapChains,
+
+        .pImageIndices = &swapchain_image_index,
+    };
 
     VkResult present_result =
         vkQueuePresentKHR(context->present_queue, &presentInfo);

@@ -3,8 +3,6 @@
 #include <cassert>
 
 void game_update_and_render(GameMemory *game_memory, GameInput *input) {
-    // Implement game update and rendering logic here
-
     assert(sizeof(GameState) <= game_memory->permanent_store_size);
     GameState *game_state = (GameState *)(game_memory->permanent_store);
 
