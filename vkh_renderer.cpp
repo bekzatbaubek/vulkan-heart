@@ -12,7 +12,6 @@
 
 #include "vkh_game.h"
 #include "vkh_memory.h"
-#include "vulkan/vulkan_core.h"
 
 #define ArrayCount(x) (sizeof(x) / sizeof((x)[0]))
 
@@ -1026,7 +1025,6 @@ void RendererInit(VulkanContext* context, GLFWwindow* window,
     std::vector<const char*> device_extensions = {
         VK_KHR_SWAPCHAIN_EXTENSION_NAME,
         VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
-        VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME,
         VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME,
         VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME,
 #ifdef __APPLE__
@@ -1084,10 +1082,6 @@ void RendererInit(VulkanContext* context, GLFWwindow* window,
         instance_extensions.emplace_back(glfwExtensions[i]);
     }
 
-    instance_extensions.emplace_back(
-        VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME);
-    instance_extensions.emplace_back(
-        VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME);
     instance_extensions.emplace_back(
         VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME);
 
@@ -1203,17 +1197,10 @@ void RendererInit(VulkanContext* context, GLFWwindow* window,
         .pNext = &extended_dynamic_state_features,
     };
 
-    VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT
-        swapchain_maintenance1_features{
-            .sType =
-                VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_EXT,
-            .pNext = &sync2_features,
-
-        };
 
     VkPhysicalDeviceDynamicRenderingFeatures dynamic_rendering{
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES,
-        .pNext = &swapchain_maintenance1_features,
+        .pNext = &sync2_features,
     };
 
     VkPhysicalDeviceFeatures2 physical_features2 = {
@@ -1225,14 +1212,6 @@ void RendererInit(VulkanContext* context, GLFWwindow* window,
 
     if (dynamic_rendering.dynamicRendering == VK_FALSE) {
         std::cerr << "Dynamic rendering is not supported by the GPU!\n";
-    }
-
-    if (swapchain_maintenance1_features.swapchainMaintenance1 == VK_FALSE) {
-        std::cerr << "Swapchain maintenance 1 is not supported by the GPU!\n";
-    }
-
-    if (sync2_features.synchronization2 == VK_FALSE) {
-        std::cerr << "Synchronization 2 is not supported by the GPU!\n";
     }
 
     if (physical_features2.features.samplerAnisotropy == VK_FALSE) {
@@ -1256,21 +1235,14 @@ void RendererInit(VulkanContext* context, GLFWwindow* window,
     VkPhysicalDeviceSynchronization2FeaturesKHR enable_sync2_features{
         .sType =
             VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES_KHR,
-        .synchronization2 = VK_TRUE,
         .pNext = &enabled_extended_dynamic_state_features,
+        .synchronization2 = VK_TRUE,
     };
 
-    VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT
-        enable_swapchain_maintenance1_features{
-            .sType =
-                VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_EXT,
-            .pNext = &enable_sync2_features,
-            .swapchainMaintenance1 = VK_TRUE,
-        };
 
     VkPhysicalDeviceDynamicRenderingFeatures enable_dynamic_rendering{
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES,
-        .pNext = &enable_swapchain_maintenance1_features,
+        .pNext = &enable_sync2_features,
         .dynamicRendering = VK_TRUE,
     };
 
@@ -1279,8 +1251,8 @@ void RendererInit(VulkanContext* context, GLFWwindow* window,
         .pNext = &enable_dynamic_rendering,
         .features =
             {
-                .samplerAnisotropy = VK_TRUE,
                 .sampleRateShading = VK_TRUE,
+                .samplerAnisotropy = VK_TRUE,
             },
     };
 
