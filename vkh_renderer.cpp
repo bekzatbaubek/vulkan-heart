@@ -1084,6 +1084,8 @@ void RendererInit(VulkanContext* context, GLFWwindow* window,
 
     instance_extensions.emplace_back(
         VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME);
+    instance_extensions.emplace_back(
+        VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME);
 
 #ifndef NDEBUG
     instance_extensions.emplace_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
@@ -1197,7 +1199,6 @@ void RendererInit(VulkanContext* context, GLFWwindow* window,
         .pNext = &extended_dynamic_state_features,
     };
 
-
     VkPhysicalDeviceDynamicRenderingFeatures dynamic_rendering{
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES,
         .pNext = &sync2_features,
@@ -1238,7 +1239,6 @@ void RendererInit(VulkanContext* context, GLFWwindow* window,
         .pNext = &enabled_extended_dynamic_state_features,
         .synchronization2 = VK_TRUE,
     };
-
 
     VkPhysicalDeviceDynamicRenderingFeatures enable_dynamic_rendering{
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES,
@@ -1348,15 +1348,13 @@ void RendererDrawFrame(VulkanContext* context, MemoryArena* arena) {
                               context->image_acquire_semaphore[current_frame],
                               VK_NULL_HANDLE, &swapchain_image_index);
 
-    std::cerr << "Swapchain: Image index: " << swapchain_image_index << '\n';
-
     if (image_result == VK_ERROR_OUT_OF_DATE_KHR) {
         RecreateSwapchainResources(context, arena);
     }
 
     UpdateUniformBuffer(context, current_frame);
 
-    vkResetCommandPool(context->device, context->command_pool, 0);
+    vkResetCommandBuffer(context->command_buffer[current_frame], 0);
     RecordCommandBuffer(context, swapchain_image_index, arena, current_frame);
 
     VkSemaphore waitSemaphores[] = {

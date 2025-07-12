@@ -127,11 +127,11 @@ int main(int argc, char* argv[]) {
 
     GameInput input = {};
     while (!glfwWindowShouldClose(window)) {
-        glfwPollEvents();
         double start_time = glfwGetTime();
 
-        platform_reload_game_code(&gameCode, sourcePath);
+        glfwPollEvents();
 
+        platform_reload_game_code(&gameCode, sourcePath);
         platform_handle_input(window, &input);
 
         gameCode.gameUpdateAndRender(&game_memory, &input);
@@ -140,16 +140,12 @@ int main(int argc, char* argv[]) {
         double end_time = glfwGetTime();
         double time_elapsed_seconds = (end_time - start_time);
 
-        static uint32_t update_count = 0;
-        if (update_count++ % 3 == 0) {
-            glfwSetWindowTitle(
-                window,
+        std::string window_title =
+            "Vulkan Heart - " + std::to_string(1.0f / time_elapsed_seconds) +
+            " FPS" + " - " + std::to_string(time_elapsed_seconds * 1000.0f) +
+            " ms";
 
-                ("Vulkan Heart - " +
-                 std::to_string(1.0f / time_elapsed_seconds) + " FPS" + " - " +
-                 std::to_string(time_elapsed_seconds * 1000.0f) + " ms")
-                    .c_str());
-        }
+        glfwSetWindowTitle(window, window_title.c_str());
     }
 
     vkDeviceWaitIdle(context.device);
