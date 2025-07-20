@@ -355,11 +355,13 @@ void CreateSwapchain(VulkanContext* context, MemoryArena* parent_arena) {
               << capabilities.minImageCount
               << ", maxImageCount = " << capabilities.maxImageCount << '\n';
 
-    uint32_t imageCount = capabilities.minImageCount + 1;
-    if (capabilities.maxImageCount > 0 &&
-        imageCount > capabilities.maxImageCount) {
-        imageCount = capabilities.maxImageCount;
-    }
+    uint32_t imageCount = capabilities.minImageCount;
+    assert(imageCount == 2);  // Double buffering by default
+
+    // if (capabilities.maxImageCount > 0 &&
+    //     imageCount > capabilities.maxImageCount) {
+    //     imageCount = capabilities.maxImageCount;
+    // }
 
     std::cerr << "Engine Image Count: " << imageCount << '\n';
 
@@ -387,10 +389,10 @@ void CreateSwapchain(VulkanContext* context, MemoryArena* parent_arena) {
             }
         }
         for (uint32_t i = 0; i < formatCount; ++i) {
-            if (formats[i].format == VK_FORMAT_R16G16B16A16_SFLOAT &&
+            if (formats[i].format == VK_FORMAT_A2B10G10R10_UNORM_PACK32 &&
                 formats[i].colorSpace ==
                     VK_COLOR_SPACE_DISPLAY_P3_NONLINEAR_EXT) {
-                std::cerr << "Found suitable format"
+                std::cerr << "Found suitable format: "
                           << string_VkFormat(formats[i].format)
                           << " and colorspace: "
                           << string_VkColorSpaceKHR(formats[i].colorSpace)
@@ -1035,7 +1037,7 @@ void RendererInit(VulkanContext* context, GLFWwindow* window,
     uint32_t instance_api_version = 0;
     vkEnumerateInstanceVersion(&instance_api_version);
 
-    assert(instance_api_version >= VK_API_VERSION_1_2);
+    assert(instance_api_version >= VK_API_VERSION_1_3);
 
     VkApplicationInfo appInfo = {};
     appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
@@ -1187,32 +1189,24 @@ void RendererInit(VulkanContext* context, GLFWwindow* window,
         queueCreateInfos[1] = queueCreateInfo;
     }
 
-    VkPhysicalDeviceExtendedDynamicStateFeaturesEXT extended_dynamic_state_features{
-        .sType =
-            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT,
+    VkPhysicalDeviceVulkan13Features vk13_features = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
         .pNext = 0,
-    };
 
-    VkPhysicalDeviceSynchronization2FeaturesKHR sync2_features{
-        .sType =
-            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES_KHR,
-        .pNext = &extended_dynamic_state_features,
-    };
-
-    VkPhysicalDeviceDynamicRenderingFeatures dynamic_rendering{
-        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES,
-        .pNext = &sync2_features,
     };
 
     VkPhysicalDeviceFeatures2 physical_features2 = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
-        .pNext = &dynamic_rendering,
+        .pNext = &vk13_features,
     };
 
     vkGetPhysicalDeviceFeatures2(context->physical_device, &physical_features2);
 
-    if (dynamic_rendering.dynamicRendering == VK_FALSE) {
+    if (vk13_features.dynamicRendering == VK_FALSE) {
         std::cerr << "Dynamic rendering is not supported by the GPU!\n";
+    }
+    if (vk13_features.synchronization2 == VK_FALSE) {
+        std::cerr << "Synchronization 2 is not supported by the GPU!\n";
     }
 
     if (physical_features2.features.samplerAnisotropy == VK_FALSE) {
@@ -1221,34 +1215,17 @@ void RendererInit(VulkanContext* context, GLFWwindow* window,
     if (physical_features2.features.sampleRateShading == VK_FALSE) {
         std::cerr << "Sample rate shading is not supported by the GPU!\n";
     }
-    if (extended_dynamic_state_features.extendedDynamicState == VK_FALSE) {
-        std::cerr << "Extended dynamic state is not supported by the GPU!\n";
-    }
 
-    VkPhysicalDeviceExtendedDynamicStateFeaturesEXT
-        enabled_extended_dynamic_state_features{
-            .sType =
-                VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT,
-            .pNext = 0,
-            .extendedDynamicState = VK_TRUE,
-        };
-
-    VkPhysicalDeviceSynchronization2FeaturesKHR enable_sync2_features{
-        .sType =
-            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES_KHR,
-        .pNext = &enabled_extended_dynamic_state_features,
-        .synchronization2 = VK_TRUE,
-    };
-
-    VkPhysicalDeviceDynamicRenderingFeatures enable_dynamic_rendering{
-        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES,
-        .pNext = &enable_sync2_features,
+    VkPhysicalDeviceVulkan13Features enable_vk13_features = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
+        .pNext = 0,
         .dynamicRendering = VK_TRUE,
+        .synchronization2 = VK_TRUE,
     };
 
     VkPhysicalDeviceFeatures2 enable_physical_features2 = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
-        .pNext = &enable_dynamic_rendering,
+        .pNext = &enable_vk13_features,
         .features =
             {
                 .sampleRateShading = VK_TRUE,

@@ -86,7 +86,7 @@ void platform_reload_game_code(GameCode* gameCode, const char* sourcePath) {
     if (currentModified > gameCode->lastModified) {
         gameCode->lastModified = currentModified;
         platform_free_game_code(gameCode);
-        platform_load_game_code(sourcePath);
+        *gameCode = platform_load_game_code(sourcePath);
         std::cerr << "Game code reloaded\n";
     }
 }

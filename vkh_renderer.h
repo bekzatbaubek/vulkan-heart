@@ -79,7 +79,8 @@ struct VulkanContext {
 
     VkCommandPool command_pool;
 
-    uint32_t MAX_FRAMES_IN_FLIGHT = 3;
+    // Note: double buffer by default
+    uint32_t MAX_FRAMES_IN_FLIGHT = 2;
 
     VkImage* swapchain_images;
     VkImageView* swapchain_image_views;
