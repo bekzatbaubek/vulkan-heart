@@ -381,22 +381,22 @@ void CreateSwapchain(VulkanContext* context, MemoryArena* parent_arena) {
         for (uint32_t i = 0; i < formatCount; ++i) {
             if (formats[i].colorSpace ==
                 VK_COLOR_SPACE_DISPLAY_P3_NONLINEAR_EXT) {
-                std::cerr << "Found format: "
-                          << string_VkFormat(formats[i].format)
-                          << " and colorspace: "
-                          << string_VkColorSpaceKHR(formats[i].colorSpace)
-                          << '\n';
+                // std::cerr << "Found format: "
+                //           << string_VkFormat(formats[i].format)
+                //           << " and colorspace: "
+                //           << string_VkColorSpaceKHR(formats[i].colorSpace)
+                //           << '\n';
             }
         }
         for (uint32_t i = 0; i < formatCount; ++i) {
             if (formats[i].format == VK_FORMAT_A2B10G10R10_UNORM_PACK32 &&
                 formats[i].colorSpace ==
                     VK_COLOR_SPACE_DISPLAY_P3_NONLINEAR_EXT) {
-                std::cerr << "Found suitable format: "
-                          << string_VkFormat(formats[i].format)
-                          << " and colorspace: "
-                          << string_VkColorSpaceKHR(formats[i].colorSpace)
-                          << '\n';
+                // std::cerr << "Found suitable format: "
+                //           << string_VkFormat(formats[i].format)
+                //           << " and colorspace: "
+                //           << string_VkColorSpaceKHR(formats[i].colorSpace)
+                //           << '\n';
                 surfaceFormat = formats[i];
                 break;
             }
@@ -1051,7 +1051,7 @@ void RendererInit(VulkanContext* context, GLFWwindow* window,
     instance_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     instance_info.pApplicationInfo = &appInfo;
 
-#ifndef NDEBUG
+#ifdef VKH_DEBUG
     VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo{};
     debugCreateInfo.sType =
         VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
@@ -1089,7 +1089,7 @@ void RendererInit(VulkanContext* context, GLFWwindow* window,
     instance_extensions.emplace_back(
         VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME);
 
-#ifndef NDEBUG
+#ifdef VKH_DEBUG
     instance_extensions.emplace_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 #endif
 
@@ -1240,7 +1240,7 @@ void RendererInit(VulkanContext* context, GLFWwindow* window,
         .pQueueCreateInfos = queueCreateInfos,
     };
 
-#ifndef NDEBUG
+#ifdef VKH_DEBUG
     device_info.enabledLayerCount = validation_layers.size();
     device_info.ppEnabledLayerNames = validation_layers.data();
 #else
@@ -1327,6 +1327,7 @@ void RendererDrawFrame(VulkanContext* context, MemoryArena* arena) {
 
     if (image_result == VK_ERROR_OUT_OF_DATE_KHR) {
         RecreateSwapchainResources(context, arena);
+        return;
     }
 
     UpdateUniformBuffer(context, current_frame);
@@ -1388,6 +1389,7 @@ void RendererDrawFrame(VulkanContext* context, MemoryArena* arena) {
     if (present_result == VK_ERROR_OUT_OF_DATE_KHR ||
         present_result == VK_SUBOPTIMAL_KHR) {
         RecreateSwapchainResources(context, arena);
+        return;
     } else if (present_result != VK_SUCCESS) {
         InvalidCodePath;
     }

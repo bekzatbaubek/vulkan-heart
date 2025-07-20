@@ -7,6 +7,7 @@ glslangValidator -V shaders/heart.frag -o shaders/heart.frag.spv
 
 clang++ \
     --std=c++17 \
+    -D VKH_DEBUG \
     -g \
     -fno-exceptions \
     -fno-rtti \
@@ -16,6 +17,7 @@ clang++ \
 
 clang++ \
     --std=c++17 \
+    -D VKH_DEBUG \
     -g \
     -fno-exceptions \
     -fno-rtti \
