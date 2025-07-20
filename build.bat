@@ -20,6 +20,6 @@ clang++ ^
     -o .\build\vkh_platform.exe ^
     -I"vendor\include" ^
     -L"vendor\lib-vc2022" ^
-    -I"C:\VulkanSDK\1.4.313.1\Include" ^
-    -L"C:\VulkanSDK\1.4.313.1\Lib" ^
+    -I"C:\VulkanSDK\1.4.321.1\Include" ^
+    -L"C:\VulkanSDK\1.4.321.1\Lib" ^
     -lvulkan-1 -lglfw3 -luser32 -lgdi32 -lshell32 -lmsvcrt -Xlinker /NODEFAULTLIB:libcmt -Xlinker /INCREMENTAL:NO
