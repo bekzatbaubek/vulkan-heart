@@ -1,47 +1,26 @@
-#include <string>
+#include <cstdint>
 #ifdef _WIN64
 #include <windows.h>
 #else
 #include <dlfcn.h>
 #endif
 
-#include <sys/stat.h>
-
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
+#include <SDL3/SDL.h>
+#include <SDL3/SDL_timer.h>
+#include <SDL3/SDL_vulkan.h>
 
 #include <cassert>
-#include <cstdint>
-#include <cstdlib>
-#include <ctime>
+#include <iostream>
 
 #include "vkh_game.h"
 #include "vkh_memory.cpp"
 #include "vkh_renderer.cpp"
 
+bool running = true;
+
 time_t getLastModified(const char* path) {
     struct stat attr;
     return stat(path, &attr) == 0 ? attr.st_mtime : 0;
-}
-
-void platform_handle_input(GLFWwindow* window, GameInput* input) {
-    input->digital_inputs[D_LEFT].is_down =
-        glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS;
-
-    input->digital_inputs[D_RIGHT].is_down =
-        glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS;
-
-    input->digital_inputs[D_UP].is_down =
-        glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS;
-
-    input->digital_inputs[D_DOWN].is_down =
-        glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS;
-
-    input->digital_inputs[SELECT].is_down =
-        glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS;
-
-    input->digital_inputs[START].is_down =
-        glfwGetKey(window, GLFW_KEY_ENTER) == GLFW_PRESS;
 }
 
 struct GameCode {
@@ -91,30 +70,32 @@ void platform_reload_game_code(GameCode* gameCode, const char* sourcePath) {
     }
 }
 
-void window_focus_callback(GLFWwindow* window, int focused) {
-    if (focused) {
-        // The window gained input focus
-    } else {
-        // The window lost input focus
-        glfwWaitEvents();
+void handle_SDL_event(SDL_Event* event) {
+    switch (event->type) {
+        case SDL_EVENT_QUIT: {
+            std::cerr << "SDL_QUIT event received\n";
+            running = false;
+        } break;
+        case SDL_EVENT_KEY_DOWN: {
+            std::cerr << "Key pressed: " << SDL_GetKeyName(event->key.key)
+                      << '\n';
+        } break;
+        case SDL_EVENT_WINDOW_RESIZED: {
+            std::cerr << "Window resized to: " << event->window.data1 << "x"
+                      << event->window.data2 << '\n';
+        } break;
     }
 }
 
-int main(int argc, char* argv[]) {
+int main(int argc, char** argv) {
     int window_width = 800;
     int window_height = 600;
 
-    glfwInit();
-
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-
-    GLFWwindow* window =
-        glfwCreateWindow(window_width, window_height, "Vulkan Heart", 0, 0);
+    SDL_Init(SDL_INIT_VIDEO);
+    SDL_Window* window = SDL_CreateWindow("Vulkan Heart", window_width,
+                                          window_height, SDL_WINDOW_VULKAN);
     assert(window);
-
-    glfwSetWindowFocusCallback(window, window_focus_callback);
-
-    uint64_t timer_frequency = glfwGetTimerFrequency();
+    SDL_SetWindowResizable(window, true);
 
 #ifdef _WIN64
     const char* sourcePath = "vkh_game.dll";
@@ -123,13 +104,13 @@ int main(int argc, char* argv[]) {
 #endif
     GameCode gameCode = platform_load_game_code(sourcePath);
 
-    MemoryArena renderer_arena = {0};
+    MemoryArena renderer_arena = {};
     arena_init(&renderer_arena, megabytes(128));
 
-    VulkanContext context = {0};
+    VulkanContext context = {};
     RendererInit(&context, window, &renderer_arena);
 
-    GameMemory game_memory = {0};
+    GameMemory game_memory = {};
     game_memory.permanent_store_size = megabytes((uint64_t)256);
     game_memory.permanent_store = malloc(game_memory.permanent_store_size);
 
@@ -137,29 +118,21 @@ int main(int argc, char* argv[]) {
     game_memory.transient_store = malloc(game_memory.transient_store_size);
 
     GameInput input = {};
-    while (!glfwWindowShouldClose(window)) {
-        double start_time = glfwGetTime();
 
-        glfwPollEvents();
+    // Main event loop
+    SDL_Event event;
 
+    while (running) {
+        uint64_t ticks_start_ms = SDL_GetTicks();
+        while (SDL_PollEvent(&event)) {
+            handle_SDL_event(&event);
+        }
         platform_reload_game_code(&gameCode, sourcePath);
-        platform_handle_input(window, &input);
 
         gameCode.gameUpdateAndRender(&game_memory, &input);
         RendererDrawFrame(&context, &renderer_arena);
 
-        double end_time = glfwGetTime();
-        double time_elapsed_seconds = (end_time - start_time);
-
-        std::string window_title =
-            "Vulkan Heart - " + std::to_string(1.0f / time_elapsed_seconds) +
-            " FPS" + " - " + std::to_string(time_elapsed_seconds * 1000.0f) +
-            " ms";
-
-        glfwSetWindowTitle(window, window_title.c_str());
+        uint64_t ticks_end_ms = SDL_GetTicks();
+        uint64_t frame_time_ms = ticks_end_ms - ticks_start_ms;
     }
-
-    vkDeviceWaitIdle(context.device);
-    platform_free_game_code(&gameCode);
-    return 0;
 }

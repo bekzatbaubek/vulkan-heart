@@ -1,6 +1,7 @@
 #include "vkh_renderer.h"
 
-#include <GLFW/glfw3.h>
+#include <SDL3/SDL.h>
+#include <SDL3/SDL_vulkan.h>
 #include <sys/stat.h>
 #include <vulkan/vk_enum_string_helper.h>
 #include <vulkan/vulkan.h>
@@ -492,18 +493,18 @@ void CreateSwapchain(VulkanContext* context, MemoryArena* parent_arena) {
 
     end_temp_arena(&tmp);
 
-    context->swapchain_images =
-        (VkImage*)arena_push(parent_arena, imageCount * sizeof(VkImage));
-    vkGetSwapchainImagesKHR(context->device, context->swapchain, &imageCount,
-                            context->swapchain_images);
-
     context->swapchain_image_count = imageCount;
 
     if (context->old_swapchain) {
     } else {
         context->swapchain_image_views = (VkImageView*)arena_push(
             parent_arena, imageCount * sizeof(VkImageView));
+        context->swapchain_images =
+            (VkImage*)arena_push(parent_arena, imageCount * sizeof(VkImage));
     }
+
+    vkGetSwapchainImagesKHR(context->device, context->swapchain, &imageCount,
+                            context->swapchain_images);
 
     for (int i = 0; i < imageCount; i++) {
         VkImageViewCreateInfo viewInfo{};
@@ -966,7 +967,6 @@ void RecordCommandBuffer(VulkanContext* context, uint32_t image_index,
     context->func_table.vkCmdEndRenderingKHR(
         context->command_buffer[current_frame]);
 
-    //
     TransitionImageLayout(context, context->command_buffer[current_frame],
                           context->swapchain_images[image_index],
                           VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
@@ -1013,12 +1013,35 @@ void RecreateSwapchainResources(VulkanContext* context, MemoryArena* arena) {
         vkDestroyImageView(context->device, context->swapchain_image_views[i],
                            0);
     }
-
     context->old_swapchain = context->swapchain;
     CreateSwapchain(context, arena);
+
+    // Recreate sync objects (reuse memory, note that it will not work if
+    // MAX_FRAMES_IN_FLIGHT has been changed - needs more or less memory)
+    for (int i = 0; i < context->MAX_FRAMES_IN_FLIGHT; i++) {
+        vkDestroyFence(context->device, context->in_flight_fence[i], 0);
+        vkDestroySemaphore(context->device, context->image_acquire_semaphore[i],
+                           0);
+        vkDestroySemaphore(context->device, context->renderFinishedSemaphore[i],
+                           0);
+        VkSemaphoreCreateInfo semaphoreInfo{
+            .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+        };
+        VkFenceCreateInfo fenceInfo{
+            .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+            .flags = VK_FENCE_CREATE_SIGNALED_BIT,
+        };
+
+        vkCreateSemaphore(context->device, &semaphoreInfo, nullptr,
+                          &context->image_acquire_semaphore[i]);
+        vkCreateSemaphore(context->device, &semaphoreInfo, nullptr,
+                          &context->renderFinishedSemaphore[i]);
+        vkCreateFence(context->device, &fenceInfo, nullptr,
+                      &context->in_flight_fence[i]);
+    }
 }
 
-void RendererInit(VulkanContext* context, GLFWwindow* window,
+void RendererInit(VulkanContext* context, SDL_Window* window,
                   MemoryArena* renderer_arena) {
     std::array<const char*, 1> validation_layers = {
         "VK_LAYER_KHRONOS_validation",
@@ -1075,8 +1098,8 @@ void RendererInit(VulkanContext* context, GLFWwindow* window,
 #endif
 
     uint32_t glfwExtensionCount = 0;
-    const char** glfwExtensions;
-    glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+    char const* const* glfwExtensions;
+    glfwExtensions = SDL_Vulkan_GetInstanceExtensions(&glfwExtensionCount);
 
     std::vector<const char*> instance_extensions;
     instance_extensions.reserve(glfwExtensionCount + 10);
@@ -1153,8 +1176,7 @@ void RendererInit(VulkanContext* context, GLFWwindow* window,
 
     end_temp_arena(&tmparen);
 
-    glfwCreateWindowSurface(context->instance, window, nullptr,
-                            &context->surface);
+    SDL_Vulkan_CreateSurface(window, context->instance, 0, &context->surface);
 
     queue_indices q_indices =
         get_graphics_and_present_queue_indices(context, renderer_arena);
@@ -1325,7 +1347,8 @@ void RendererDrawFrame(VulkanContext* context, MemoryArena* arena) {
                               context->image_acquire_semaphore[current_frame],
                               VK_NULL_HANDLE, &swapchain_image_index);
 
-    if (image_result == VK_ERROR_OUT_OF_DATE_KHR) {
+    if (image_result == VK_ERROR_OUT_OF_DATE_KHR ||
+        image_result == VK_SUBOPTIMAL_KHR) {
         RecreateSwapchainResources(context, arena);
         return;
     }
@@ -1389,7 +1412,7 @@ void RendererDrawFrame(VulkanContext* context, MemoryArena* arena) {
     if (present_result == VK_ERROR_OUT_OF_DATE_KHR ||
         present_result == VK_SUBOPTIMAL_KHR) {
         RecreateSwapchainResources(context, arena);
-        return;
+
     } else if (present_result != VK_SUCCESS) {
         InvalidCodePath;
     }

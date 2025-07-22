@@ -21,9 +21,9 @@ clang++ \
     -g \
     -fno-exceptions \
     -fno-rtti \
-    vkh_platform.cpp \
+    vkh_platform_sdl.cpp \
     -o ./build/vkh_platform \
-    -lglfw \
+    -lSDL3 \
     -lvulkan
 
 # Curse upon rpath
