@@ -80,10 +80,6 @@ void handle_SDL_event(SDL_Event* event) {
             std::cerr << "Key pressed: " << SDL_GetKeyName(event->key.key)
                       << '\n';
         } break;
-        case SDL_EVENT_WINDOW_RESIZED: {
-            std::cerr << "Window resized to: " << event->window.data1 << "x"
-                      << event->window.data2 << '\n';
-        } break;
     }
 }
 

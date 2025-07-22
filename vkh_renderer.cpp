@@ -753,9 +753,13 @@ void CreateInstanceBuffer(VulkanContext* context) {
             float y = j * 1.0f;
 
             instance.transform =
-                multiply(translate(x, y, 0.0f), scale(200.0f, 190.0f, 1.0f));
+                multiply(translate(x, y, 0.0f), scale(40.0f, 40.0f, 1.0f));
 
-            instance.color = {(float)i / 5.0f, (float)j / 5.0f, 0.5f};
+            instance.color = {
+                (float)i / 5.0f,
+                (float)j / 5.0f,
+                0.5f,
+            };
 
             instances.emplace_back(instance);
         }
