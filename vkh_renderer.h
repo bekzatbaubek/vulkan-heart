@@ -66,12 +66,34 @@ struct VulkanContext {
     VkExtent2D swapchain_extent;
     uint32_t swapchain_image_count;
 
-    VkBuffer vertex_buffer;
-    VkDeviceMemory vertex_buffer_memory;
-    VkBuffer index_buffer;
-    VkDeviceMemory index_buffer_memory;
-    VkBuffer instance_buffer;
-    VkDeviceMemory instance_buffer_memory;
+    uint64_t MAX_DEVICE_MEMORY_ALLOCATION_SIZE = 1024 * 1024 * 1024;  // 1 GB
+    uint64_t MAX_VERTEX_BUFFER_SIZE = 1024 * 1024 * 256;              // 256 MB
+    uint64_t MAX_INDEX_BUFFER_SIZE = 1024 * 1024 * 256;               // 256 MB
+    uint64_t MAX_INSTANCE_BUFFER_SIZE = 1024 * 1024 * 256;            // 256 MB
+
+    VkBuffer device_memory_buffer;
+    VkDeviceMemory device_memory_buffer_memory;
+    VkDeviceSize vertex_buffer_offset = 0;
+    VkDeviceSize vertex_buffer_size = 0;
+    VkDeviceSize index_buffer_offset = MAX_VERTEX_BUFFER_SIZE + 4;
+    VkDeviceSize index_buffer_size = 0;
+    VkDeviceSize instance_buffer_offset =
+        MAX_VERTEX_BUFFER_SIZE + MAX_INDEX_BUFFER_SIZE + 4;
+    VkDeviceSize instance_buffer_size = 0;
+
+    uint64_t STAGING_BUFFER_SIZE = 1024 * 1024 * 64;  // 64 MB
+    VkBuffer staging_buffer;
+    VkDeviceMemory staging_buffer_memory;
+    void* staging_buffer_mapped;
+
+    // TODO: Remove these
+    // VkBuffer vertex_buffer;
+    // VkDeviceMemory vertex_buffer_memory;
+    // VkBuffer index_buffer;
+    // VkDeviceMemory index_buffer_memory;
+    // VkBuffer instance_buffer;
+    // VkDeviceMemory instance_buffer_memory;
+    // //
 
     VkBuffer* uniform_buffers;
     VkDeviceMemory* uniform_buffers_memory;

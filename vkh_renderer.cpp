@@ -567,7 +567,7 @@ uint32_t findMemoryType(VkPhysicalDevice phyical_devices, uint32_t typeFilter,
 }
 
 void CopyBuffer(VulkanContext* context, VkBuffer srcBuffer, VkBuffer dstBuffer,
-                VkDeviceSize size) {
+                VkDeviceSize size, VkDeviceSize dstOffset) {
     VkCommandBufferAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
     allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
@@ -585,7 +585,7 @@ void CopyBuffer(VulkanContext* context, VkBuffer srcBuffer, VkBuffer dstBuffer,
 
     VkBufferCopy copyRegion{};
     copyRegion.srcOffset = 0;
-    copyRegion.dstOffset = 0;
+    copyRegion.dstOffset = dstOffset;
     copyRegion.size = size;
     vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
 
@@ -628,6 +628,54 @@ void CreateBuffer(VulkanContext* context, VkDeviceSize size,
     vkBindBufferMemory(context->device, buffer, bufferMemory, 0);
 }
 
+void CreateDeviceStagingBuffer(VulkanContext* context,
+                               MemoryArena* renderer_arena) {
+    CreateBuffer(context, context->STAGING_BUFFER_SIZE,
+                 VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                     VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                 context->staging_buffer, context->staging_buffer_memory);
+
+    context->staging_buffer_mapped =
+        arena_push(renderer_arena, context->STAGING_BUFFER_SIZE);
+
+    vkMapMemory(context->device, context->staging_buffer_memory, 0,
+                context->STAGING_BUFFER_SIZE, 0,
+                &context->staging_buffer_mapped);
+}
+
+void CreateDeviceMemoryBuffer(VulkanContext* context) {
+    VkDeviceSize bufferSize = context->MAX_DEVICE_MEMORY_ALLOCATION_SIZE;
+
+    VkBufferCreateInfo bufferInfo{};
+    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferInfo.size = bufferSize;
+    bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
+                       VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
+                       VK_BUFFER_USAGE_2_TRANSFER_DST_BIT;
+    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+    vkCreateBuffer(context->device, &bufferInfo, nullptr,
+                   &context->device_memory_buffer);
+
+    VkMemoryRequirements memRequirements;
+    vkGetBufferMemoryRequirements(
+        context->device, context->device_memory_buffer, &memRequirements);
+
+    VkMemoryAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocInfo.allocationSize = memRequirements.size;
+    allocInfo.memoryTypeIndex =
+        findMemoryType(context->physical_device, memRequirements.memoryTypeBits,
+                       VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+    vkAllocateMemory(context->device, &allocInfo, nullptr,
+                     &context->device_memory_buffer_memory);
+
+    vkBindBufferMemory(context->device, context->device_memory_buffer,
+                       context->device_memory_buffer_memory, 0);
+}
+
 void CreateVertexBuffer(VulkanContext* context) {
     const std::vector<Vertex2D> vertices = {
         {1.0f, 0.0f},
@@ -638,25 +686,15 @@ void CreateVertexBuffer(VulkanContext* context) {
 
     VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
 
-    VkBuffer stagingBuffer;
-    VkDeviceMemory stagingBufferMemory;
-    CreateBuffer(context, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                     VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                 stagingBuffer, stagingBufferMemory);
+    assert(bufferSize <= context->STAGING_BUFFER_SIZE);
+    assert(context->vertex_buffer_size + bufferSize <=
+           context->MAX_VERTEX_BUFFER_SIZE);
+    context->vertex_buffer_size += bufferSize;
 
-    void* data;
-    vkMapMemory(context->device, stagingBufferMemory, 0, bufferSize, 0, &data);
-    memcpy(data, vertices.data(), (size_t)bufferSize);
-    vkUnmapMemory(context->device, stagingBufferMemory);
+    memcpy(context->staging_buffer_mapped, vertices.data(), (size_t)bufferSize);
 
-    CreateBuffer(
-        context, bufferSize,
-        VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, context->vertex_buffer,
-        context->vertex_buffer_memory);
-
-    CopyBuffer(context, stagingBuffer, context->vertex_buffer, bufferSize);
+    CopyBuffer(context, context->staging_buffer, context->device_memory_buffer,
+               bufferSize, context->vertex_buffer_offset);
 }
 
 void CreateUniformBuffers(VulkanContext* context, MemoryArena* arena) {
@@ -767,28 +805,17 @@ void CreateInstanceBuffer(VulkanContext* context) {
 
     VkDeviceSize bufferSize = sizeof(instances[0]) * instances.size();
 
-    VkBuffer stagingBuffer;
-    VkDeviceMemory stagingBufferMemory;
-    CreateBuffer(context, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                     VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                 stagingBuffer, stagingBufferMemory);
+    assert(bufferSize <= context->STAGING_BUFFER_SIZE);
+    assert(context->instance_buffer_size + bufferSize <=
+           context->MAX_INSTANCE_BUFFER_SIZE);
 
-    void* data;
-    vkMapMemory(context->device, stagingBufferMemory, 0, bufferSize, 0, &data);
-    memcpy(data, instances.data(), (size_t)bufferSize);
-    vkUnmapMemory(context->device, stagingBufferMemory);
+    context->instance_buffer_size += bufferSize;
 
-    CreateBuffer(
-        context, bufferSize,
-        VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, context->instance_buffer,
-        context->instance_buffer_memory);
+    memcpy(context->staging_buffer_mapped, instances.data(),
+           (size_t)bufferSize);
 
-    CopyBuffer(context, stagingBuffer, context->instance_buffer, bufferSize);
-
-    vkDestroyBuffer(context->device, stagingBuffer, nullptr);
-    vkFreeMemory(context->device, stagingBufferMemory, nullptr);
+    CopyBuffer(context, context->staging_buffer, context->device_memory_buffer,
+               bufferSize, context->instance_buffer_offset);
 }
 
 void CreateIndexBuffer(VulkanContext* context) {
@@ -796,28 +823,16 @@ void CreateIndexBuffer(VulkanContext* context) {
 
     VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
 
-    VkBuffer stagingBuffer;
-    VkDeviceMemory stagingBufferMemory;
-    CreateBuffer(context, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                     VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                 stagingBuffer, stagingBufferMemory);
+    assert(bufferSize <= context->STAGING_BUFFER_SIZE);
+    assert(context->index_buffer_size + bufferSize <=
+           context->MAX_INDEX_BUFFER_SIZE);
 
-    void* data;
-    vkMapMemory(context->device, stagingBufferMemory, 0, bufferSize, 0, &data);
-    memcpy(data, indices.data(), (size_t)bufferSize);
-    vkUnmapMemory(context->device, stagingBufferMemory);
+    context->index_buffer_size += bufferSize;
 
-    CreateBuffer(
-        context, bufferSize,
-        VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, context->index_buffer,
-        context->index_buffer_memory);
+    memcpy(context->staging_buffer_mapped, indices.data(), (size_t)bufferSize);
 
-    CopyBuffer(context, stagingBuffer, context->index_buffer, bufferSize);
-
-    vkDestroyBuffer(context->device, stagingBuffer, 0);
-    vkFreeMemory(context->device, stagingBufferMemory, 0);
+    CopyBuffer(context, context->staging_buffer, context->device_memory_buffer,
+               bufferSize, context->index_buffer_offset);
 }
 
 void CreateCommandBuffers(VulkanContext* context, MemoryArena* arena) {
@@ -951,14 +966,16 @@ void RecordCommandBuffer(VulkanContext* context, uint32_t image_index,
     scissor.extent = context->swapchain_extent;
     vkCmdSetScissor(context->command_buffer[current_frame], 0, 1, &scissor);
 
-    VkBuffer vertexBuffers[] = {context->vertex_buffer,
-                                context->instance_buffer};
-    VkDeviceSize offsets[] = {0, 0};
+    VkBuffer vertexBuffers[] = {context->device_memory_buffer,
+                                context->device_memory_buffer};
+    VkDeviceSize offsets[] = {context->vertex_buffer_offset,
+                              context->instance_buffer_offset};
 
     vkCmdBindVertexBuffers(context->command_buffer[current_frame], 0, 2,
                            vertexBuffers, offsets);
     vkCmdBindIndexBuffer(context->command_buffer[current_frame],
-                         context->index_buffer, 0, VK_INDEX_TYPE_UINT32);
+                         context->device_memory_buffer,
+                         context->index_buffer_offset, VK_INDEX_TYPE_UINT32);
 
     vkCmdBindDescriptorSets(
         context->command_buffer[current_frame], VK_PIPELINE_BIND_POINT_GRAPHICS,
@@ -1310,9 +1327,17 @@ void RendererInit(VulkanContext* context, SDL_Window* window,
     CreateGraphicsPipeline(context, renderer_arena);
     CreateCommandBuffers(context, renderer_arena);
 
+    CreateDeviceMemoryBuffer(context);
+    CreateDeviceStagingBuffer(context, renderer_arena);
+
+    // TODO: Suballocate from a buffer on a device
     CreateVertexBuffer(context);
     CreateIndexBuffer(context);
     CreateInstanceBuffer(context);
+
+    // TODO: Create a persistent staging buffer for memory transfers to GPU
+
+    // TODO: Allocate from host visible memory
     CreateUniformBuffers(context, renderer_arena);
 
     CreateDescriptorSets(context, renderer_arena);
