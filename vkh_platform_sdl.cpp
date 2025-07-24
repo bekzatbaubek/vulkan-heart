@@ -16,7 +16,7 @@
 #include "vkh_memory.cpp"
 #include "vkh_renderer.cpp"
 
-bool running = true;
+bool GLOBAL_running = true;
 
 time_t getLastModified(const char* path) {
     struct stat attr;
@@ -70,15 +70,28 @@ void platform_reload_game_code(GameCode* gameCode, const char* sourcePath) {
     }
 }
 
-void handle_SDL_event(SDL_Event* event) {
+void handle_SDL_event(SDL_Event* event, GameInput* input) {
     switch (event->type) {
         case SDL_EVENT_QUIT: {
-            std::cerr << "SDL_QUIT event received\n";
-            running = false;
+            GLOBAL_running = false;
         } break;
         case SDL_EVENT_KEY_DOWN: {
-            std::cerr << "Key pressed: " << SDL_GetKeyName(event->key.key)
-                      << '\n';
+            switch (event->key.scancode) {
+                case SDL_SCANCODE_W: {
+                    input->digital_inputs[D_UP].is_down = true;
+                } break;
+                case SDL_SCANCODE_S: {
+                    input->digital_inputs[D_DOWN].is_down = true;
+                } break;
+                case SDL_SCANCODE_A: {
+                    input->digital_inputs[D_LEFT].is_down = true;
+                } break;
+                case SDL_SCANCODE_D: {
+                    input->digital_inputs[D_RIGHT].is_down = true;
+                } break;
+                default: {
+                }
+            }
         } break;
     }
 }
@@ -118,15 +131,17 @@ int main(int argc, char** argv) {
     // Main event loop
     SDL_Event event;
 
-    while (running) {
+    while (GLOBAL_running) {
         uint64_t ticks_start_ms = SDL_GetTicks();
         while (SDL_PollEvent(&event)) {
-            handle_SDL_event(&event);
+            handle_SDL_event(&event, &input);
         }
         platform_reload_game_code(&gameCode, sourcePath);
 
         gameCode.gameUpdateAndRender(&game_memory, &input);
-        RendererDrawFrame(&context, &renderer_arena);
+        GameState* game_state = (GameState*)(game_memory.permanent_store);
+        RendererDrawFrame(&context, &renderer_arena,
+                          &game_state->frame_push_buffer);
 
         uint64_t ticks_end_ms = SDL_GetTicks();
         uint64_t frame_time_ms = ticks_end_ms - ticks_start_ms;

@@ -3,6 +3,7 @@
 #include <cstdint>
 
 #include "vkh_math.cpp"
+#include "vkh_renderer_abstraction.cpp"
 
 #define InvalidCodePath assert("Invalid Code Path" && 0)
 
@@ -49,14 +50,20 @@ struct GameInput {
 
 struct GameMemory {
     uint64_t permanent_store_size;
+    uint64_t permanent_store_used;
     void *permanent_store;
 
     uint64_t transient_store_size;
+    uint64_t transient_store_used;
     void *transient_store;
 };
 
 struct GameState {
     bool is_initialised = false;
+
+    PushBuffer frame_push_buffer;
+
+    uint64_t number_of_rectangles = 0;
 };
 
 typedef void (*game_update_t)(GameMemory *state, GameInput *input);

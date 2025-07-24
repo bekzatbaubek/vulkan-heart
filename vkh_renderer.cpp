@@ -13,6 +13,7 @@
 
 #include "vkh_game.h"
 #include "vkh_memory.h"
+#include "vulkan/vulkan_core.h"
 
 #define ArrayCount(x) (sizeof(x) / sizeof((x)[0]))
 
@@ -652,7 +653,7 @@ void CreateDeviceMemoryBuffer(VulkanContext* context) {
     bufferInfo.size = bufferSize;
     bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
                        VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
-                       VK_BUFFER_USAGE_2_TRANSFER_DST_BIT;
+                       VK_BUFFER_USAGE_TRANSFER_DST_BIT;
     bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
     vkCreateBuffer(context->device, &bufferInfo, nullptr,
@@ -842,12 +843,12 @@ void CreateCommandBuffers(VulkanContext* context, MemoryArena* arena) {
     allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     allocInfo.commandBufferCount = context->MAX_FRAMES_IN_FLIGHT;
 
-    context->command_buffer = (VkCommandBuffer*)arena_push(
+    context->command_buffers = (VkCommandBuffer*)arena_push(
         arena, sizeof(VkCommandBuffer) * context->MAX_FRAMES_IN_FLIGHT);
 
     for (int i = 0; i < context->MAX_FRAMES_IN_FLIGHT; i++) {
         VkResult res = vkAllocateCommandBuffers(context->device, &allocInfo,
-                                                &context->command_buffer[i]);
+                                                &context->command_buffers[i]);
         assert(res == VK_SUCCESS);
     }
 }
@@ -901,11 +902,11 @@ void RecordCommandBuffer(VulkanContext* context, uint32_t image_index,
     VkCommandBufferBeginInfo beginInfo{};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 
-    VkResult res = vkBeginCommandBuffer(context->command_buffer[current_frame],
+    VkResult res = vkBeginCommandBuffer(context->command_buffers[current_frame],
                                         &beginInfo);
     assert(res == VK_SUCCESS);
 
-    TransitionImageLayout(context, context->command_buffer[current_frame],
+    TransitionImageLayout(context, context->command_buffers[current_frame],
                           context->swapchain_images[image_index],
                           VK_IMAGE_LAYOUT_UNDEFINED,
                           VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 0,
@@ -946,9 +947,9 @@ void RecordCommandBuffer(VulkanContext* context, uint32_t image_index,
     };
 
     context->func_table.vkCmdBeginRenderingKHR(
-        context->command_buffer[current_frame], &renderingInfo);
+        context->command_buffers[current_frame], &renderingInfo);
 
-    vkCmdBindPipeline(context->command_buffer[current_frame],
+    vkCmdBindPipeline(context->command_buffers[current_frame],
                       VK_PIPELINE_BIND_POINT_GRAPHICS,
                       context->graphics_pipeline);
 
@@ -959,36 +960,36 @@ void RecordCommandBuffer(VulkanContext* context, uint32_t image_index,
     viewport.height = (float)context->swapchain_extent.height;
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
-    vkCmdSetViewport(context->command_buffer[current_frame], 0, 1, &viewport);
+    vkCmdSetViewport(context->command_buffers[current_frame], 0, 1, &viewport);
 
     VkRect2D scissor{};
     scissor.offset = {0, 0};
     scissor.extent = context->swapchain_extent;
-    vkCmdSetScissor(context->command_buffer[current_frame], 0, 1, &scissor);
+    vkCmdSetScissor(context->command_buffers[current_frame], 0, 1, &scissor);
 
     VkBuffer vertexBuffers[] = {context->device_memory_buffer,
                                 context->device_memory_buffer};
     VkDeviceSize offsets[] = {context->vertex_buffer_offset,
                               context->instance_buffer_offset};
 
-    vkCmdBindVertexBuffers(context->command_buffer[current_frame], 0, 2,
+    vkCmdBindVertexBuffers(context->command_buffers[current_frame], 0, 2,
                            vertexBuffers, offsets);
-    vkCmdBindIndexBuffer(context->command_buffer[current_frame],
+    vkCmdBindIndexBuffer(context->command_buffers[current_frame],
                          context->device_memory_buffer,
                          context->index_buffer_offset, VK_INDEX_TYPE_UINT32);
 
     vkCmdBindDescriptorSets(
-        context->command_buffer[current_frame], VK_PIPELINE_BIND_POINT_GRAPHICS,
-        context->pipeline_layout, 0, 1,
+        context->command_buffers[current_frame],
+        VK_PIPELINE_BIND_POINT_GRAPHICS, context->pipeline_layout, 0, 1,
         &context->descriptor_sets[current_frame], 0, nullptr);
 
-    vkCmdDrawIndexed(context->command_buffer[current_frame], 6, 200 * 200, 0, 0,
-                     0);
+    vkCmdDrawIndexed(context->command_buffers[current_frame], 6, 200 * 200, 0,
+                     0, 0);
 
     context->func_table.vkCmdEndRenderingKHR(
-        context->command_buffer[current_frame]);
+        context->command_buffers[current_frame]);
 
-    TransitionImageLayout(context, context->command_buffer[current_frame],
+    TransitionImageLayout(context, context->command_buffers[current_frame],
                           context->swapchain_images[image_index],
                           VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                           VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
@@ -996,7 +997,7 @@ void RecordCommandBuffer(VulkanContext* context, uint32_t image_index,
                           VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
                           VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT);
 
-    res = vkEndCommandBuffer(context->command_buffer[current_frame]);
+    res = vkEndCommandBuffer(context->command_buffers[current_frame]);
     assert(res == VK_SUCCESS);
 }
 
@@ -1010,7 +1011,7 @@ void CreateSyncObjects(VulkanContext* context, MemoryArena* arena) {
 
     context->image_acquire_semaphore = (VkSemaphore*)arena_push(
         arena, sizeof(VkSemaphore) * context->MAX_FRAMES_IN_FLIGHT);
-    context->renderFinishedSemaphore = (VkSemaphore*)arena_push(
+    context->render_finished_semaphore = (VkSemaphore*)arena_push(
         arena, sizeof(VkSemaphore) * context->MAX_FRAMES_IN_FLIGHT);
     context->in_flight_fence = (VkFence*)arena_push(
         arena, sizeof(VkFence) * context->MAX_FRAMES_IN_FLIGHT);
@@ -1019,7 +1020,7 @@ void CreateSyncObjects(VulkanContext* context, MemoryArena* arena) {
         vkCreateSemaphore(context->device, &semaphoreInfo, nullptr,
                           &context->image_acquire_semaphore[i]);
         vkCreateSemaphore(context->device, &semaphoreInfo, nullptr,
-                          &context->renderFinishedSemaphore[i]);
+                          &context->render_finished_semaphore[i]);
         vkCreateFence(context->device, &fenceInfo, nullptr,
                       &context->in_flight_fence[i]);
     }
@@ -1043,8 +1044,8 @@ void RecreateSwapchainResources(VulkanContext* context, MemoryArena* arena) {
         vkDestroyFence(context->device, context->in_flight_fence[i], 0);
         vkDestroySemaphore(context->device, context->image_acquire_semaphore[i],
                            0);
-        vkDestroySemaphore(context->device, context->renderFinishedSemaphore[i],
-                           0);
+        vkDestroySemaphore(context->device,
+                           context->render_finished_semaphore[i], 0);
         VkSemaphoreCreateInfo semaphoreInfo{
             .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
         };
@@ -1056,7 +1057,7 @@ void RecreateSwapchainResources(VulkanContext* context, MemoryArena* arena) {
         vkCreateSemaphore(context->device, &semaphoreInfo, nullptr,
                           &context->image_acquire_semaphore[i]);
         vkCreateSemaphore(context->device, &semaphoreInfo, nullptr,
-                          &context->renderFinishedSemaphore[i]);
+                          &context->render_finished_semaphore[i]);
         vkCreateFence(context->device, &fenceInfo, nullptr,
                       &context->in_flight_fence[i]);
     }
@@ -1077,6 +1078,8 @@ void RendererInit(VulkanContext* context, SDL_Window* window,
         "VK_KHR_portability_subset",
 #endif
     };
+
+    std::vector<const char*> instance_extensions;
 
     uint32_t instance_api_version = 0;
     vkEnumerateInstanceVersion(&instance_api_version);
@@ -1122,7 +1125,6 @@ void RendererInit(VulkanContext* context, SDL_Window* window,
     char const* const* glfwExtensions;
     glfwExtensions = SDL_Vulkan_GetInstanceExtensions(&glfwExtensionCount);
 
-    std::vector<const char*> instance_extensions;
     instance_extensions.reserve(glfwExtensionCount + 10);
     for (uint32_t i = 0; i < glfwExtensionCount; i++) {
         instance_extensions.emplace_back(glfwExtensions[i]);
@@ -1132,6 +1134,8 @@ void RendererInit(VulkanContext* context, SDL_Window* window,
         VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME);
     instance_extensions.emplace_back(
         VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME);
+    instance_extensions.emplace_back(
+        VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
 
 #ifdef VKH_DEBUG
     instance_extensions.emplace_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
@@ -1163,6 +1167,14 @@ void RendererInit(VulkanContext* context, SDL_Window* window,
     vkEnumeratePhysicalDevices(context->instance, &device_count, devices);
     context->physical_device =
         ChooseDiscreteGPU(context, devices, device_count);
+
+    context->physical_device_properties2 = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
+        .pNext = 0,
+    };
+
+    vkGetPhysicalDeviceProperties2(context->physical_device,
+                                   &context->physical_device_properties2);
 
     temp_arena tmparen = begin_temp_arena(renderer_arena);
 
@@ -1318,6 +1330,7 @@ void RendererInit(VulkanContext* context, SDL_Window* window,
     end_temp_arena(&tmp);
 
     CreateSwapchain(context, renderer_arena);
+    CreateSyncObjects(context, renderer_arena);
 
     CreateDescriptorSetLayout(context, renderer_arena);
 
@@ -1331,9 +1344,9 @@ void RendererInit(VulkanContext* context, SDL_Window* window,
     CreateDeviceStagingBuffer(context, renderer_arena);
 
     // TODO: Suballocate from a buffer on a device
-    CreateVertexBuffer(context);
-    CreateIndexBuffer(context);
-    CreateInstanceBuffer(context);
+    // CreateVertexBuffer(context);
+    // CreateIndexBuffer(context);
+    // CreateInstanceBuffer(context);
 
     // TODO: Create a persistent staging buffer for memory transfers to GPU
 
@@ -1341,8 +1354,6 @@ void RendererInit(VulkanContext* context, SDL_Window* window,
     CreateUniformBuffers(context, renderer_arena);
 
     CreateDescriptorSets(context, renderer_arena);
-
-    CreateSyncObjects(context, renderer_arena);
 }
 
 void UpdateUniformBuffer(VulkanContext* context, uint32_t frame_index) {
@@ -1362,7 +1373,74 @@ void UpdateUniformBuffer(VulkanContext* context, uint32_t frame_index) {
     memcpy(context->uniform_buffers_mapped[frame_index], &ubo, sizeof(ubo));
 }
 
-void RendererDrawFrame(VulkanContext* context, MemoryArena* arena) {
+// NOTE: THIS WILL NOT WORK PROPERLY BECAUSE ITS NOT SORTED OR PROCESSED
+// WHATSOEVER
+void UploadPushBufferContentsToGPU(VulkanContext* context, PushBuffer* pb) {
+    for (PushBufferEntry* pbe = pb->entries; pbe <= (PushBufferEntry*)pb->size;
+         pbe += sizeof(PushBufferEntry)) {
+        switch (pbe->type) {
+            case QUAD: {
+                if (pbe == pb->entries) {
+                    // First entry, upload vertices
+                    CreateVertexBuffer(context);
+                }
+
+                InstanceData instance;
+
+                float x = pbe->data.quad.x1;
+                float y = pbe->data.quad.y1;
+
+                instance.transform =
+                    multiply(translate(x, y, 0.0f), scale(40.0f, 40.0f, 1.0f));
+                instance.color = {
+                    1.0f,
+                    1.0f,
+                    1.0f,
+                };
+
+                VkDeviceSize instance_size = sizeof(InstanceData);
+                assert(context->instance_buffer_size + instance_size <=
+                       context->MAX_INSTANCE_BUFFER_SIZE);
+                context->instance_buffer_size += instance_size;
+                memcpy(context->staging_buffer_mapped, &instance,
+                       instance_size);
+                CopyBuffer(context, context->staging_buffer,
+                           context->device_memory_buffer, instance_size,
+                           context->instance_buffer_offset);
+                {
+                    const std::vector<uint32_t> indices = {0, 1, 2, 2, 3, 0};
+
+                    VkDeviceSize bufferSize =
+                        sizeof(indices[0]) * indices.size();
+
+                    assert(bufferSize <= context->STAGING_BUFFER_SIZE);
+                    assert(context->index_buffer_size + bufferSize <=
+                           context->MAX_INDEX_BUFFER_SIZE);
+
+                    context->index_buffer_size += bufferSize;
+
+                    memcpy(context->staging_buffer_mapped, indices.data(),
+                           (size_t)bufferSize);
+
+                    CopyBuffer(context, context->staging_buffer,
+                               context->device_memory_buffer, bufferSize,
+                               context->index_buffer_offset);
+                }
+
+            } break;
+            case TRIANGLE: {
+                InvalidCodePath;
+            }; break;
+            default: {
+                std::cerr << "Unknown PushBufferEntry type: "
+                          << static_cast<int>(pbe->type) << '\n';
+            } break;
+        }
+    }
+}
+
+void RendererDrawFrame(VulkanContext* context, MemoryArena* arena,
+                       PushBuffer* push_buffer) {
     static uint32_t current_frame = 0;
 
     vkWaitForFences(context->device, 1,
@@ -1384,7 +1462,10 @@ void RendererDrawFrame(VulkanContext* context, MemoryArena* arena) {
 
     UpdateUniformBuffer(context, current_frame);
 
-    vkResetCommandBuffer(context->command_buffer[current_frame], 0);
+    // Update Vertex and Index buffers if needed
+    UploadPushBufferContentsToGPU(context, push_buffer);
+
+    vkResetCommandBuffer(context->command_buffers[current_frame], 0);
     RecordCommandBuffer(context, swapchain_image_index, arena, current_frame);
 
     VkSemaphore waitSemaphores[] = {
@@ -1394,10 +1475,10 @@ void RendererDrawFrame(VulkanContext* context, MemoryArena* arena) {
         VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
     };
     VkSemaphore signalSemaphores[] = {
-        context->renderFinishedSemaphore[current_frame],
+        context->render_finished_semaphore[current_frame],
     };
     VkCommandBuffer commandBuffers[] = {
-        context->command_buffer[current_frame],
+        context->command_buffers[current_frame],
     };
 
     VkSubmitInfo submitInfo{
@@ -1447,4 +1528,5 @@ void RendererDrawFrame(VulkanContext* context, MemoryArena* arena) {
     }
 
     current_frame = (current_frame + 1) % context->MAX_FRAMES_IN_FLIGHT;
+    push_buffer->size = 0;  // Reset the push buffer for the next frame
 }
