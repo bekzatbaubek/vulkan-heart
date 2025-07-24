@@ -3,6 +3,7 @@
 #include "vkh_memory.h"
 
 #include <cassert>
+#include <cstdlib>
 
 void arena_init(MemoryArena* arena, size_t size) {
     arena->base = (uint8_t*)malloc(size);

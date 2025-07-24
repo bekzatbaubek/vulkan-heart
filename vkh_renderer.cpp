@@ -1274,8 +1274,8 @@ void RendererInit(VulkanContext* context, SDL_Window* window,
     VkPhysicalDeviceVulkan13Features enable_vk13_features = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
         .pNext = 0,
-        .dynamicRendering = VK_TRUE,
         .synchronization2 = VK_TRUE,
+        .dynamicRendering = VK_TRUE,
     };
 
     VkPhysicalDeviceFeatures2 enable_physical_features2 = {
