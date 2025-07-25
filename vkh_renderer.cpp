@@ -898,7 +898,8 @@ void TransitionImageLayout(VulkanContext* context, VkCommandBuffer cmd,
 }
 
 void RecordCommandBuffer(VulkanContext* context, uint32_t image_index,
-                         MemoryArena* arena, uint32_t current_frame) {
+                         MemoryArena* arena, uint32_t current_frame,
+                         PushBuffer* pb) {
     VkCommandBufferBeginInfo beginInfo{};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 
@@ -983,8 +984,8 @@ void RecordCommandBuffer(VulkanContext* context, uint32_t image_index,
         VK_PIPELINE_BIND_POINT_GRAPHICS, context->pipeline_layout, 0, 1,
         &context->descriptor_sets[current_frame], 0, nullptr);
 
-    vkCmdDrawIndexed(context->command_buffers[current_frame], 6, 200 * 200, 0,
-                     0, 0);
+    vkCmdDrawIndexed(context->command_buffers[current_frame], 6,
+                     pb->number_of_entries, 0, 0, 0);
 
     context->func_table.vkCmdEndRenderingKHR(
         context->command_buffers[current_frame]);
@@ -1343,13 +1344,6 @@ void RendererInit(VulkanContext* context, SDL_Window* window,
     CreateDeviceMemoryBuffer(context);
     CreateDeviceStagingBuffer(context, renderer_arena);
 
-    // TODO: Suballocate from a buffer on a device
-    // CreateVertexBuffer(context);
-    // CreateIndexBuffer(context);
-    // CreateInstanceBuffer(context);
-
-    // TODO: Create a persistent staging buffer for memory transfers to GPU
-
     // TODO: Allocate from host visible memory
     CreateUniformBuffers(context, renderer_arena);
 
@@ -1375,68 +1369,55 @@ void UpdateUniformBuffer(VulkanContext* context, uint32_t frame_index) {
 
 // NOTE: THIS WILL NOT WORK PROPERLY BECAUSE ITS NOT SORTED OR PROCESSED
 // WHATSOEVER
-void UploadPushBufferContentsToGPU(VulkanContext* context, PushBuffer* pb) {
-    for (PushBufferEntry* pbe = pb->entries; pbe <= (PushBufferEntry*)pb->size;
-         pbe += sizeof(PushBufferEntry)) {
-        switch (pbe->type) {
-            case QUAD: {
-                if (pbe == pb->entries) {
-                    // First entry, upload vertices
-                    CreateVertexBuffer(context);
-                }
+void UploadPushBufferContentsToGPU(VulkanContext* context, PushBuffer* pb,
+                                   MemoryArena* arena) {
+    temp_arena tmp = begin_temp_arena(arena);
 
-                InstanceData instance;
+    uint32_t number_of_entries = pb->number_of_entries;
 
-                float x = pbe->data.quad.x1;
-                float y = pbe->data.quad.y1;
+    InstanceData* all_instances = (InstanceData*)arena_push(
+        tmp.parent, sizeof(InstanceData) * number_of_entries);
 
-                instance.transform =
-                    multiply(translate(x, y, 0.0f), scale(40.0f, 40.0f, 1.0f));
-                instance.color = {
-                    1.0f,
-                    1.0f,
-                    1.0f,
-                };
+    for (size_t i = 0; i < number_of_entries; i++) {
+        PushBufferEntry* pbe =
+            (PushBufferEntry*)(pb->arena.base + i * sizeof(PushBufferEntry));
 
-                VkDeviceSize instance_size = sizeof(InstanceData);
-                assert(context->instance_buffer_size + instance_size <=
-                       context->MAX_INSTANCE_BUFFER_SIZE);
-                context->instance_buffer_size += instance_size;
-                memcpy(context->staging_buffer_mapped, &instance,
-                       instance_size);
-                CopyBuffer(context, context->staging_buffer,
-                           context->device_memory_buffer, instance_size,
-                           context->instance_buffer_offset);
-                {
-                    const std::vector<uint32_t> indices = {0, 1, 2, 2, 3, 0};
+        if (pbe->type == QUAD) {
+            if (i == 0) {
+                // First entry, upload vertices
+                CreateVertexBuffer(context);
+                CreateIndexBuffer(context);
+            }
 
-                    VkDeviceSize bufferSize =
-                        sizeof(indices[0]) * indices.size();
+            InstanceData instance;
 
-                    assert(bufferSize <= context->STAGING_BUFFER_SIZE);
-                    assert(context->index_buffer_size + bufferSize <=
-                           context->MAX_INDEX_BUFFER_SIZE);
+            float x = pbe->data.quad.x;
+            float y = pbe->data.quad.y;
 
-                    context->index_buffer_size += bufferSize;
+            instance.transform =
+                multiply(translate(x, y, 0.0f), scale(100.0f, 100.0f, 1.0f));
+            instance.color = {
+                1.0f,
+                0.3f,
+                0.8f,
+            };
 
-                    memcpy(context->staging_buffer_mapped, indices.data(),
-                           (size_t)bufferSize);
-
-                    CopyBuffer(context, context->staging_buffer,
-                               context->device_memory_buffer, bufferSize,
-                               context->index_buffer_offset);
-                }
-
-            } break;
-            case TRIANGLE: {
-                InvalidCodePath;
-            }; break;
-            default: {
-                std::cerr << "Unknown PushBufferEntry type: "
-                          << static_cast<int>(pbe->type) << '\n';
-            } break;
+            all_instances[i] = instance;
         }
     }
+
+    if (number_of_entries > 0) {
+        VkDeviceSize all_instances_size =
+            sizeof(InstanceData) * number_of_entries;
+        assert(all_instances_size <= context->MAX_INSTANCE_BUFFER_SIZE);
+        context->instance_buffer_size += all_instances_size;
+        memcpy(context->staging_buffer_mapped, all_instances,
+               all_instances_size);
+        CopyBuffer(context, context->staging_buffer,
+                   context->device_memory_buffer, all_instances_size,
+                   context->instance_buffer_offset);
+    }
+    end_temp_arena(&tmp);
 }
 
 void RendererDrawFrame(VulkanContext* context, MemoryArena* arena,
@@ -1463,10 +1444,11 @@ void RendererDrawFrame(VulkanContext* context, MemoryArena* arena,
     UpdateUniformBuffer(context, current_frame);
 
     // Update Vertex and Index buffers if needed
-    UploadPushBufferContentsToGPU(context, push_buffer);
+    UploadPushBufferContentsToGPU(context, push_buffer, arena);
 
     vkResetCommandBuffer(context->command_buffers[current_frame], 0);
-    RecordCommandBuffer(context, swapchain_image_index, arena, current_frame);
+    RecordCommandBuffer(context, swapchain_image_index, arena, current_frame,
+                        push_buffer);
 
     VkSemaphore waitSemaphores[] = {
         context->image_acquire_semaphore[current_frame],
@@ -1528,5 +1510,8 @@ void RendererDrawFrame(VulkanContext* context, MemoryArena* arena,
     }
 
     current_frame = (current_frame + 1) % context->MAX_FRAMES_IN_FLIGHT;
-    push_buffer->size = 0;  // Reset the push buffer for the next frame
+
+    // Reset the push buffer for the next frame
+    push_buffer->arena.used = 0;
+    push_buffer->number_of_entries = 0;
 }

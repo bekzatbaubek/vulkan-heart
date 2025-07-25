@@ -126,12 +126,12 @@ int main(int argc, char** argv) {
     game_memory.transient_store_size = gigabytes((uint64_t)2);
     game_memory.transient_store = malloc(game_memory.transient_store_size);
 
-    GameInput input = {};
-
     // Main event loop
     SDL_Event event;
 
     while (GLOBAL_running) {
+        GameInput input = {0};
+
         uint64_t ticks_start_ms = SDL_GetTicks();
         while (SDL_PollEvent(&event)) {
             handle_SDL_event(&event, &input);

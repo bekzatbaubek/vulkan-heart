@@ -1,7 +1,10 @@
 #include <cassert>
 #include <cstdint>
 
+#include "vkh_memory.h"
+
 enum PushBufferEntryType {
+    NONE,
     TRIANGLE,
     QUAD,
 
@@ -12,7 +15,7 @@ struct PushBufferEntry {
     PushBufferEntryType type;
     union {
         struct {
-            float x1, y1;         // Top-left corner
+            float x, y;           // Top-left corner
             float width, height;  // Bottom-right corner
         } quad;
         struct {
@@ -24,23 +27,22 @@ struct PushBufferEntry {
 };
 
 struct PushBuffer {
-    uint64_t size;
-    uint64_t capacity;  // number of entries?
-    PushBufferEntry* entries;
+    MemoryArena arena;
+    uint32_t number_of_entries = 0;
 };
 
 inline void DrawRectangle(PushBuffer* pb, float x, float y, float width,
                           float height) {
-    assert(pb->size + sizeof(PushBufferEntry) <= pb->capacity);
+    PushBufferEntry* pbe =
+        (PushBufferEntry*)arena_push(&pb->arena, sizeof(PushBufferEntry));
 
-    PushBufferEntry* entry = pb->entries + pb->size + sizeof(PushBufferEntry);
-    pb->size += sizeof(PushBufferEntry);
+    pbe->type = QUAD;
+    pbe->data.quad.x = x;
+    pbe->data.quad.y = y;
+    pbe->data.quad.width = width;
+    pbe->data.quad.height = height;
 
-    entry->type = QUAD;
-    entry->data.quad.x1 = x;
-    entry->data.quad.y1 = y;
-    entry->data.quad.width = width;
-    entry->data.quad.height = height;
+    pb->number_of_entries++;
 
     return;
 }
