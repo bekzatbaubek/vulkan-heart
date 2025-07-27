@@ -1395,11 +1395,11 @@ void UploadPushBufferContentsToGPU(VulkanContext* context, PushBuffer* pb,
             float y = pbe->data.quad.y;
 
             instance.transform =
-                multiply(translate(x, y, 0.0f), scale(100.0f, 100.0f, 1.0f));
+                multiply(scale(pbe->data.quad.width, pbe->data.quad.height, 1.0f), translate(x, y, 0.0f));
             instance.color = {
-                1.0f,
-                0.3f,
-                0.8f,
+                pbe->color[0],
+                pbe->color[1],
+                pbe->color[2],
             };
 
             all_instances[i] = instance;
@@ -1510,8 +1510,4 @@ void RendererDrawFrame(VulkanContext* context, MemoryArena* arena,
     }
 
     current_frame = (current_frame + 1) % context->MAX_FRAMES_IN_FLIGHT;
-
-    // Reset the push buffer for the next frame
-    push_buffer->arena.used = 0;
-    push_buffer->number_of_entries = 0;
 }

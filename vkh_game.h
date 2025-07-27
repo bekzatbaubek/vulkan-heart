@@ -58,6 +58,9 @@ struct GameMemory {
     void *transient_store;
 };
 
+struct GameCamera {
+};
+
 struct GameState {
     bool is_initialised = false;
 

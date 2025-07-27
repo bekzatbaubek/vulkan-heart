@@ -24,6 +24,7 @@ struct PushBufferEntry {
             float x3, y3;  // Vertex 3
         } triangle;
     } data;
+    float color[3];  // RGB color
 };
 
 struct PushBuffer {
@@ -32,7 +33,7 @@ struct PushBuffer {
 };
 
 inline void DrawRectangle(PushBuffer* pb, float x, float y, float width,
-                          float height) {
+                          float height, float r, float g, float b) {
     PushBufferEntry* pbe =
         (PushBufferEntry*)arena_push(&pb->arena, sizeof(PushBufferEntry));
 
@@ -41,6 +42,10 @@ inline void DrawRectangle(PushBuffer* pb, float x, float y, float width,
     pbe->data.quad.y = y;
     pbe->data.quad.width = width;
     pbe->data.quad.height = height;
+
+    pbe->color[0] = r;
+    pbe->color[1] = g;
+    pbe->color[2] = b;
 
     pb->number_of_entries++;
 
