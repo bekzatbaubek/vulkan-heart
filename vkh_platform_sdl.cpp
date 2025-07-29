@@ -1,4 +1,3 @@
-#include <cstdint>
 #ifdef _WIN64
 #include <windows.h>
 #else
@@ -10,7 +9,8 @@
 #include <SDL3/SDL_vulkan.h>
 
 #include <cassert>
-#include <iostream>
+#include <cstdint>
+#include <cstdio>
 
 #include "vkh_game.h"
 #include "vkh_memory.cpp"
@@ -66,7 +66,7 @@ void platform_reload_game_code(GameCode* gameCode, const char* sourcePath) {
         gameCode->lastModified = currentModified;
         platform_free_game_code(gameCode);
         *gameCode = platform_load_game_code(sourcePath);
-        std::cerr << "Game code reloaded\n";
+        fprintf(stderr, "Game code reloaded\n");
     }
 }
 

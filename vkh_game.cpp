@@ -39,25 +39,25 @@ void game_update_and_render(GameMemory *game_memory, GameInput *input) {
     if (input->digital_inputs[D_RIGHT].is_down) {
         input->digital_inputs[D_RIGHT].was_down = true;
 
-
     } else {
         if (input->digital_inputs[D_RIGHT].was_down) {
             input->digital_inputs[D_RIGHT].was_down = false;
         }
     }
 
-    for (int iY = 0; iY < 100; iY++) {
-        for (int iX = 0; iX < 100; iX++) {
-            float x = 0.0f + (float)iX * 12.0f;
-            float y = 0.0f + (float)iY * 12.0f;
-            float width = 12.0f;
-            float height = 12.0f;
+    for (int iY = 0; iY < 5; iY++) {
+        for (int iX = 0; iX < 5; iX++) {
+            float x = 0.0f + (float)iX * 50.0f;
+            float y = 0.0f + (float)iY * 50.0f;
+            float width = 50.0f;
+            float height = 50.0f;
 
-            float r = (float)iX / 100.0f;
-            float g = (float)iY / 100.0f;
+            float r = (float)iX / 5.0f;
+            float g = (float)iY / 5.0f;
             float b = 0.5f;
 
-            DrawRectangle(&game_state->frame_push_buffer, x, y, width, height, r, g, b);
+            DrawRectangle(&game_state->frame_push_buffer, x, y, width, height,
+                          r, g, b);
         }
     }
 }

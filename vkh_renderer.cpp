@@ -9,7 +9,6 @@
 #include <array>
 #include <cassert>
 #include <cstdint>
-#include <iostream>
 
 #include "vkh_game.h"
 #include "vkh_memory.h"
@@ -22,7 +21,7 @@ debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
               VkDebugUtilsMessageTypeFlagsEXT messageType,
               const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
               void* pUserData) {
-    std::cerr << "validation layer: " << pCallbackData->pMessage << '\n';
+    fprintf(stderr, "validation layer: %s", pCallbackData->pMessage);
 
     return VK_FALSE;
 }
@@ -84,8 +83,8 @@ VkPhysicalDevice ChooseDiscreteGPU(VulkanContext* context,
                 VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU ||
             device_properties.deviceType ==
                 VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
-            std::cerr << "GPU found\n"
-                      << "GPU name: " << device_properties.deviceName << '\n';
+            fprintf(stderr, "GPU found: GPU name: %s \n",
+                    device_properties.deviceName);
 
             return devices[i];
         }
@@ -115,7 +114,7 @@ my_file readfile(const char* path, MemoryArena* arena) {
         uint32_t padding = 0;
 
         if (file_size % 4 != 0) {
-            std::cerr << "File size is not a multiple of 4\n";
+            fprintf(stderr, "File size is not a multiple of 4\n");
             padding = 4 - (file_size % 4);
         }
 
@@ -353,9 +352,9 @@ void CreateSwapchain(VulkanContext* context, MemoryArena* parent_arena) {
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(context->physical_device,
                                               context->surface, &capabilities);
 
-    std::cerr << "Surface capabilities: minImageCount = "
-              << capabilities.minImageCount
-              << ", maxImageCount = " << capabilities.maxImageCount << '\n';
+    fprintf(stderr,
+            "Surface capabilities: minImageCount = %d, maxImageCount = %d\n",
+            capabilities.minImageCount, capabilities.maxImageCount);
 
     uint32_t imageCount = capabilities.minImageCount;
     assert(imageCount == 2);  // Double buffering by default
@@ -365,7 +364,7 @@ void CreateSwapchain(VulkanContext* context, MemoryArena* parent_arena) {
     //     imageCount = capabilities.maxImageCount;
     // }
 
-    std::cerr << "Engine Image Count: " << imageCount << '\n';
+    fprintf(stderr, "Engine Image Count: %d\n", imageCount);
 
     uint32_t formatCount;
     vkGetPhysicalDeviceSurfaceFormatsKHR(context->physical_device,
@@ -383,7 +382,7 @@ void CreateSwapchain(VulkanContext* context, MemoryArena* parent_arena) {
         for (uint32_t i = 0; i < formatCount; ++i) {
             if (formats[i].colorSpace ==
                 VK_COLOR_SPACE_DISPLAY_P3_NONLINEAR_EXT) {
-                // std::cerr << "Found format: "
+                // fprintf(stderr,"Found format: "
                 //           << string_VkFormat(formats[i].format)
                 //           << " and colorspace: "
                 //           << string_VkColorSpaceKHR(formats[i].colorSpace)
@@ -394,7 +393,7 @@ void CreateSwapchain(VulkanContext* context, MemoryArena* parent_arena) {
             if (formats[i].format == VK_FORMAT_A2B10G10R10_UNORM_PACK32 &&
                 formats[i].colorSpace ==
                     VK_COLOR_SPACE_DISPLAY_P3_NONLINEAR_EXT) {
-                // std::cerr << "Found suitable format: "
+                // fprintf(stderr,"Found suitable format: "
                 //           << string_VkFormat(formats[i].format)
                 //           << " and colorspace: "
                 //           << string_VkColorSpaceKHR(formats[i].colorSpace)
@@ -407,11 +406,11 @@ void CreateSwapchain(VulkanContext* context, MemoryArena* parent_arena) {
         if (surfaceFormat.format == VK_FORMAT_UNDEFINED) {
             surfaceFormat.format = VK_FORMAT_B8G8R8A8_SRGB;
             surfaceFormat.colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
-            std::cerr << "No suitable format found, using default:"
-                      << string_VkFormat(surfaceFormat.format)
-                      << " colorspace: "
-                      << string_VkColorSpaceKHR(surfaceFormat.colorSpace)
-                      << '\n';
+            fprintf(
+                stderr,
+                "No suitable format found, using default: %s, colorspace %s\n",
+                string_VkFormat(surfaceFormat.format),
+                string_VkColorSpaceKHR(surfaceFormat.colorSpace));
         }
     }
 
@@ -429,12 +428,12 @@ void CreateSwapchain(VulkanContext* context, MemoryArena* parent_arena) {
 
         for (uint32_t i = 0; i < presentModeCount; ++i) {
             if (presentModes[i] == VK_PRESENT_MODE_MAILBOX_KHR) {
-                std::cerr << "Found mailbox present mode\n";
+                fprintf(stderr, "Found mailbox present mode\n");
                 presentMode = presentModes[i];
                 break;
             }
             if (presentModes[i] == VK_PRESENT_MODE_IMMEDIATE_KHR) {
-                std::cerr << "Found immediate present mode\n";
+                fprintf(stderr, "Found immediate present mode\n");
             }
         }
     }
@@ -531,8 +530,8 @@ void CreateSwapchain(VulkanContext* context, MemoryArena* parent_arena) {
     context->swapchain_format = surfaceFormat.format;
     context->swapchain_extent = extent;
 
-    std::cerr << "Swapchain extent: " << context->swapchain_extent.width << ", "
-              << context->swapchain_extent.height << '\n';
+    fprintf(stderr, "Swapchain extent: %d, %d", context->swapchain_extent.width,
+            context->swapchain_extent.height);
 }
 
 void CreateCommandPool(VulkanContext* context, MemoryArena* arena) {
@@ -1028,7 +1027,7 @@ void CreateSyncObjects(VulkanContext* context, MemoryArena* arena) {
 }
 
 void RecreateSwapchainResources(VulkanContext* context, MemoryArena* arena) {
-    std::cerr << "Recreating swapchain\n";
+    fprintf(stderr, "Recreating swapchain\n");
 
     vkDeviceWaitIdle(context->device);
 
@@ -1195,16 +1194,15 @@ void RendererInit(VulkanContext* context, SDL_Window* window,
         for (const char* ext : device_extensions) {
             if (strcmp(available_device_extensions[i].extensionName, ext) ==
                 0) {
-                std::cerr << "Found extension: "
-                          << available_device_extensions[i].extensionName
-                          << '\n';
+                fprintf(stderr, "Found extension: %s\n",
+                        available_device_extensions[i].extensionName);
                 non_equal--;
             }
         }
     }
 
     if (non_equal > 0) {
-        std::cerr << "Not all required device extensions are supported!\n";
+        fprintf(stderr, "Not all required device extensions are supported!\n");
         InvalidCodePath;
     }
 
@@ -1259,17 +1257,17 @@ void RendererInit(VulkanContext* context, SDL_Window* window,
     vkGetPhysicalDeviceFeatures2(context->physical_device, &physical_features2);
 
     if (vk13_features.dynamicRendering == VK_FALSE) {
-        std::cerr << "Dynamic rendering is not supported by the GPU!\n";
+        fprintf(stderr, "Dynamic rendering is not supported by the GPU!\n");
     }
     if (vk13_features.synchronization2 == VK_FALSE) {
-        std::cerr << "Synchronization 2 is not supported by the GPU!\n";
+        fprintf(stderr, "Synchronization 2 is not supported by the GPU!\n");
     }
 
     if (physical_features2.features.samplerAnisotropy == VK_FALSE) {
-        std::cerr << "Sampler anisotropy is not supported by the GPU!\n";
+        fprintf(stderr, "Sampler anisotropy is not supported by the GPU!\n");
     }
     if (physical_features2.features.sampleRateShading == VK_FALSE) {
-        std::cerr << "Sample rate shading is not supported by the GPU!\n";
+        fprintf(stderr, "Sample rate shading is not supported by the GPU!\n");
     }
 
     VkPhysicalDeviceVulkan13Features enable_vk13_features = {
@@ -1394,8 +1392,9 @@ void UploadPushBufferContentsToGPU(VulkanContext* context, PushBuffer* pb,
             float x = pbe->data.quad.x;
             float y = pbe->data.quad.y;
 
-            instance.transform =
-                multiply(scale(pbe->data.quad.width, pbe->data.quad.height, 1.0f), translate(x, y, 0.0f));
+            instance.transform = multiply(
+                scale(pbe->data.quad.width, pbe->data.quad.height, 1.0f),
+                translate(x, y, 0.0f));
             instance.color = {
                 pbe->color[0],
                 pbe->color[1],
@@ -1481,7 +1480,8 @@ void RendererDrawFrame(VulkanContext* context, MemoryArena* arena,
                                  context->in_flight_fence[current_frame]);
 
     if (res != VK_SUCCESS) {
-        std::cerr << "Failed to submit draw command buffer: " << res << '\n';
+        fprintf(stderr, "Failed to submit draw command buffer: %s",
+                string_VkResult(res));
     }
 
     VkSwapchainKHR swapChains[] = {context->swapchain};
