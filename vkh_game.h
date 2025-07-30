@@ -2,14 +2,8 @@
 
 #include <cstdint>
 
-#include "vkh_math.cpp"
-#include "vkh_renderer_abstraction.cpp"
-
-#define InvalidCodePath assert("Invalid Code Path" && 0)
-
-#define kilobytes(n) ((n) * 1024LL)
-#define megabytes(n) (kilobytes(n) * 1024LL)
-#define gigabytes(n) (megabytes(n) * 1024LL)
+#include "vkh_math.h"
+#include "vkh_renderer_abstraction.h"
 
 struct key_state {
     bool is_down;
@@ -58,8 +52,7 @@ struct GameMemory {
     void *transient_store;
 };
 
-struct GameCamera {
-};
+struct GameCamera {};
 
 struct GameState {
     bool is_initialised = false;

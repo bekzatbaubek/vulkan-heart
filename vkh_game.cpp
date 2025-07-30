@@ -3,6 +3,7 @@
 #include <cassert>
 
 #include "vkh_memory.cpp"
+#include "vkh_renderer_abstraction.cpp"
 
 void game_update_and_render(GameMemory *game_memory, GameInput *input) {
     assert(sizeof(GameState) <= game_memory->permanent_store_size);
@@ -45,15 +46,15 @@ void game_update_and_render(GameMemory *game_memory, GameInput *input) {
         }
     }
 
-    for (int iY = 0; iY < 5; iY++) {
-        for (int iX = 0; iX < 5; iX++) {
+    for (int iY = 0; iY < 20; iY++) {
+        for (int iX = 0; iX < 20; iX++) {
             float x = 0.0f + (float)iX * 50.0f;
             float y = 0.0f + (float)iY * 50.0f;
             float width = 50.0f;
             float height = 50.0f;
 
-            float r = (float)iX / 5.0f;
-            float g = (float)iY / 5.0f;
+            float r = (float)iX / 20.0f;
+            float g = (float)iY / 20.0f;
             float b = 0.5f;
 
             DrawRectangle(&game_state->frame_push_buffer, x, y, width, height,

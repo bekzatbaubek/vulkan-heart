@@ -6,7 +6,6 @@
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_timer.h>
-#include <SDL3/SDL_vulkan.h>
 
 #include <cassert>
 #include <cstdint>
@@ -15,6 +14,12 @@
 #include "vkh_game.h"
 #include "vkh_memory.cpp"
 #include "vkh_renderer.cpp"
+
+#define InvalidCodePath assert("Invalid Code Path" && 0)
+
+#define kilobytes(n) ((n) * 1024LL)
+#define megabytes(n) (kilobytes(n) * 1024LL)
+#define gigabytes(n) (megabytes(n) * 1024LL)
 
 bool GLOBAL_running = true;
 
@@ -126,24 +131,44 @@ int main(int argc, char** argv) {
     game_memory.transient_store_size = gigabytes((uint64_t)2);
     game_memory.transient_store = malloc(game_memory.transient_store_size);
 
+    uint64_t timer_frequency =
+        SDL_GetPerformanceFrequency();  // counts per second
+
     // Main event loop
     SDL_Event event;
 
     while (GLOBAL_running) {
         GameInput input = {0};
 
-        uint64_t ticks_start_ms = SDL_GetTicks();
+        uint64_t ticks_start = SDL_GetPerformanceCounter();
         while (SDL_PollEvent(&event)) {
             handle_SDL_event(&event, &input);
         }
         platform_reload_game_code(&gameCode, sourcePath);
 
         gameCode.gameUpdateAndRender(&game_memory, &input);
+
         GameState* game_state = (GameState*)(game_memory.permanent_store);
         RendererDrawFrame(&context, &renderer_arena,
                           &game_state->frame_push_buffer);
 
-        uint64_t ticks_end_ms = SDL_GetTicks();
-        uint64_t frame_time_ms = ticks_end_ms - ticks_start_ms;
+        uint64_t ticks_end = SDL_GetPerformanceCounter();
+        uint64_t elapsed_ticks = ticks_end - ticks_start;
+
+        double frame_time_seconds =
+            (double)elapsed_ticks / (double)timer_frequency;
+        double frame_time_milliseconds = frame_time_seconds * 1000.0;
+        double fps = 1.0 / frame_time_seconds;
+
+        if (frame_time_milliseconds <= 16.6) {
+            SDL_Delay(
+                17 -
+                (uint32_t)
+                    frame_time_milliseconds);  // Sleep for a short duration
+        }
+
+        char title[256];
+        snprintf(title, 256, "Frametime: %.2f ms", frame_time_milliseconds);
+        SDL_SetWindowTitle(window, title);
     }
 }

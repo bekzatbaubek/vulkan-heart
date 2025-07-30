@@ -10,9 +10,9 @@
 #include <cassert>
 #include <cstdint>
 
-#include "vkh_game.h"
+#include "vkh_math.cpp"
 #include "vkh_memory.h"
-#include "vulkan/vulkan_core.h"
+#include "vkh_renderer_abstraction.h"
 
 #define ArrayCount(x) (sizeof(x) / sizeof((x)[0]))
 
@@ -346,7 +346,8 @@ void CreateSwapchain(VulkanContext* context, MemoryArena* parent_arena) {
         VK_FORMAT_UNDEFINED,
     };
     VkSurfaceCapabilitiesKHR capabilities;
-    VkPresentModeKHR presentMode = VK_PRESENT_MODE_FIFO_KHR;
+    // VkPresentModeKHR presentMode = VK_PRESENT_MODE_FIFO_KHR;
+    VkPresentModeKHR presentMode = VK_PRESENT_MODE_IMMEDIATE_KHR;
     VkExtent2D extent;
 
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(context->physical_device,
@@ -562,7 +563,6 @@ uint32_t findMemoryType(VkPhysicalDevice phyical_devices, uint32_t typeFilter,
         }
     }
 
-    InvalidCodePath;
     return -1;
 }
 
@@ -1203,7 +1203,6 @@ void RendererInit(VulkanContext* context, SDL_Window* window,
 
     if (non_equal > 0) {
         fprintf(stderr, "Not all required device extensions are supported!\n");
-        InvalidCodePath;
     }
 
     end_temp_arena(&tmparen);
@@ -1506,7 +1505,6 @@ void RendererDrawFrame(VulkanContext* context, MemoryArena* arena,
         RecreateSwapchainResources(context, arena);
 
     } else if (present_result != VK_SUCCESS) {
-        InvalidCodePath;
     }
 
     current_frame = (current_frame + 1) % context->MAX_FRAMES_IN_FLIGHT;
