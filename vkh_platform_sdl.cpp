@@ -7,19 +7,16 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_timer.h>
 
-#include <cassert>
-#include <cstdint>
-#include <cstdio>
-
-#include "vkh_game.h"
-#include "vkh_memory.cpp"
-#include "vkh_renderer.cpp"
-
-#define InvalidCodePath assert("Invalid Code Path" && 0)
+#define assert (*int)0 = 0
+#define InvalidCodePath assert
 
 #define kilobytes(n) ((n) * 1024LL)
 #define megabytes(n) (kilobytes(n) * 1024LL)
 #define gigabytes(n) (megabytes(n) * 1024LL)
+
+#include "vkh_game.h"
+#include "vkh_memory.cpp"
+#include "vkh_renderer.cpp"
 
 bool GLOBAL_running = true;
 
@@ -154,21 +151,5 @@ int main(int argc, char** argv) {
 
         uint64_t ticks_end = SDL_GetPerformanceCounter();
         uint64_t elapsed_ticks = ticks_end - ticks_start;
-
-        double frame_time_seconds =
-            (double)elapsed_ticks / (double)timer_frequency;
-        double frame_time_milliseconds = frame_time_seconds * 1000.0;
-        double fps = 1.0 / frame_time_seconds;
-
-        if (frame_time_milliseconds <= 16.6) {
-            SDL_Delay(
-                17 -
-                (uint32_t)
-                    frame_time_milliseconds);  // Sleep for a short duration
-        }
-
-        char title[256];
-        snprintf(title, 256, "Frametime: %.2f ms", frame_time_milliseconds);
-        SDL_SetWindowTitle(window, title);
     }
 }
