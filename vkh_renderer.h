@@ -55,6 +55,8 @@ struct VulkanContext {
 
     VkPhysicalDeviceProperties2 physical_device_properties2;
 
+    int WindowDrawableAreaWidth;
+    int WindowDrawableAreaHeight;
     VkSurfaceKHR surface;
     VkDebugUtilsMessengerEXT debug_messenger;
 

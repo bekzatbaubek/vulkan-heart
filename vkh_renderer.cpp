@@ -358,7 +358,7 @@ void CreateSwapchain(VulkanContext* context, MemoryArena* parent_arena) {
             capabilities.minImageCount, capabilities.maxImageCount);
 
     uint32_t imageCount = capabilities.minImageCount;
-    assert(imageCount == 2);  // Double buffering by default
+    // assert(imageCount == 2);  // Double buffering by default
 
     // if (capabilities.maxImageCount > 0 &&
     //     imageCount > capabilities.maxImageCount) {
@@ -452,6 +452,9 @@ void CreateSwapchain(VulkanContext* context, MemoryArena* parent_arena) {
     }
 
     extent = actualExtent;
+
+    extent.width = context->WindowDrawableAreaWidth;
+    extent.height = context->WindowDrawableAreaHeight;
 
     VkSwapchainCreateInfoKHR createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;

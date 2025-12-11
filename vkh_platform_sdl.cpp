@@ -1,3 +1,5 @@
+#include "vkh_memory.h"
+#include "vkh_renderer.h"
 #ifdef _WIN64
 #include <windows.h>
 #else
@@ -77,7 +79,7 @@ void platform_reload_game_code(GameCode* gameCode, const char* sourcePath) {
     }
 }
 
-void handle_SDL_event(SDL_Event* event, GameInput* input) {
+void handle_SDL_event(SDL_Event* event, GameInput* input, VulkanContext* renderer_context, MemoryArena* renderer_arena) {
     switch (event->type) {
         case SDL_EVENT_QUIT: {
             GLOBAL_running = false;
@@ -101,7 +103,10 @@ void handle_SDL_event(SDL_Event* event, GameInput* input) {
             }
         } break;
         case SDL_EVENT_WINDOW_RESIZED: {
-            printf("Window resized: width: %d, height: %d\n", event->window.data1, event->window.data2);
+            // printf("Window resized: width: %d, height: %d\n", event->window.data1, event->window.data2);
+            renderer_context->WindowDrawableAreaWidth = event->window.data1;
+            renderer_context->WindowDrawableAreaHeight = event->window.data2;
+            RecreateSwapchainResources(renderer_context, renderer_arena);
         } break;
         case SDL_EVENT_MOUSE_MOTION: {
             // printf("Mouse moved: x: %f y: %f, xrel: %f, yrel: %f\n", event->motion.x, event->motion.y, event->motion.xrel, event->motion.yrel);
@@ -138,6 +143,9 @@ int main(int argc, char** argv) {
     arena_init(&renderer_arena, megabytes(128));
 
     VulkanContext context = {};
+    context.WindowDrawableAreaWidth = window_width;
+    context.WindowDrawableAreaHeight = window_height;
+
     RendererInit(&context, window, &renderer_arena);
 
     GameMemory game_memory = {};
@@ -157,7 +165,7 @@ int main(int argc, char** argv) {
 
         uint64_t ticks_start = SDL_GetPerformanceCounter();
         while (SDL_PollEvent(&event)) {
-            handle_SDL_event(&event, &input);
+            handle_SDL_event(&event, &input, &context, &renderer_arena);
         }
         platform_reload_game_code(&gameCode, sourcePath);
 
