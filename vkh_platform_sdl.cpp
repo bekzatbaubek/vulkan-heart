@@ -7,8 +7,13 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_timer.h>
 
-#define assert (*int)0 = 0
-#define InvalidCodePath assert
+#ifdef VKH_DEBUG
+#define Assert(expr) {if (!(expr)) {__builtin_debugtrap();}}
+#else
+#define Assert(expr)
+#endif
+
+#define InvalidCodePath Assert(false)
 
 #define kilobytes(n) ((n) * 1024LL)
 #define megabytes(n) (kilobytes(n) * 1024LL)
@@ -49,7 +54,7 @@ GameCode platform_load_game_code(const char* sourcePath) {
 
 #ifdef _WIN64
     gameCode.so_handle = LoadLibrary(sourcePath);
-    assert(gameCode.so_handle);
+    Assert(gameCode.so_handle);
     gameCode.gameUpdateAndRender = (game_update_t)GetProcAddress(
         gameCode.so_handle, "game_update_and_render");
 #else
@@ -57,7 +62,7 @@ GameCode platform_load_game_code(const char* sourcePath) {
     gameCode.gameUpdateAndRender =
         (game_update_t)dlsym(gameCode.so_handle, "game_update_and_render");
 #endif
-    assert(gameCode.gameUpdateAndRender);
+    Assert(gameCode.gameUpdateAndRender);
 
     return gameCode;
 }
@@ -94,6 +99,20 @@ void handle_SDL_event(SDL_Event* event, GameInput* input) {
                 default: {
                 }
             }
+        } break;
+        case SDL_EVENT_WINDOW_RESIZED: {
+            printf("Window resized: width: %d, height: %d\n", event->window.data1, event->window.data2);
+        } break;
+        case SDL_EVENT_MOUSE_MOTION: {
+            // printf("Mouse moved: x: %f y: %f, xrel: %f, yrel: %f\n", event->motion.x, event->motion.y, event->motion.xrel, event->motion.yrel);
+            input->mouse_x = event->motion.x;
+            input->mouse_y = event->motion.y;
+        } break;
+        case SDL_EVENT_MOUSE_BUTTON_DOWN: {
+            // printf("Mouse button down: button: %d, x: %f, y: %f\n", event->button.button, event->button.x, event->button.y);
+        } break;
+        case SDL_EVENT_MOUSE_BUTTON_UP: {
+            // printf("Mouse button up: button: %d, x: %f, y: %f\n", event->button.button, event->button.x, event->button.y);
         } break;
     }
 }
@@ -133,9 +152,8 @@ int main(int argc, char** argv) {
 
     // Main event loop
     SDL_Event event;
-
+    GameInput input = {0};
     while (GLOBAL_running) {
-        GameInput input = {0};
 
         uint64_t ticks_start = SDL_GetPerformanceCounter();
         while (SDL_PollEvent(&event)) {

@@ -1,7 +1,5 @@
 #pragma once
 
-#include <cstdint>
-
 #include "vkh_math.h"
 #include "vkh_renderer_abstraction.h"
 

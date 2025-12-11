@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stdint.h>
+
 struct vec2 {
     float x, y;
 };

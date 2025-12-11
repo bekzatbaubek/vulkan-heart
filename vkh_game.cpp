@@ -45,20 +45,32 @@ void game_update_and_render(GameMemory *game_memory, GameInput *input) {
             input->digital_inputs[D_RIGHT].was_down = false;
         }
     }
+    {
+        float x = input->mouse_x - 50.0f;
+        float y = 800.0f - input->mouse_y - 0.0f;
+        float width = 50.0f;
+        float height = 50.0f;
+        float r = 0.2f;
+        float g = 0.3f;
+        float b = 1.0f;
+        float a = 1.0f;
 
-    for (int iY = 0; iY < 20; iY++) {
-        for (int iX = 0; iX < 20; iX++) {
-            float x = 0.0f + (float)iX * 50.0f;
-            float y = 0.0f + (float)iY * 50.0f;
-            float width = 50.0f;
-            float height = 50.0f;
-
-            float r = (float)iX / 20.0f;
-            float g = (float)iY / 20.0f;
-            float b = 0.5f;
-
-            DrawRectangle(&game_state->frame_push_buffer, x, y, width, height,
-                          r, g, b);
-        }
+        DrawRectangle(&game_state->frame_push_buffer, x, y, width, height, r, g, b);
     }
+
+    // for (int iY = 0; iY < 20; iY++) {
+    //     for (int iX = 0; iX < 20; iX++) {
+    //         float x = 0.0f + (float)iX * 50.0f;
+    //         float y = 0.0f + (float)iY * 50.0f;
+    //         float width = 50.0f;
+    //         float height = 50.0f;
+
+    //         float r = (float)iX / 20.0f;
+    //         float g = (float)iY / 20.0f;
+    //         float b = 0.5f;
+
+    //         DrawRectangle(&game_state->frame_push_buffer, x, y, width, height,
+    //                       r, g, b);
+    //     }
+    // }
 }

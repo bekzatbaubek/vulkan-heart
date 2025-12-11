@@ -346,8 +346,8 @@ void CreateSwapchain(VulkanContext* context, MemoryArena* parent_arena) {
         VK_FORMAT_UNDEFINED,
     };
     VkSurfaceCapabilitiesKHR capabilities;
-    // VkPresentModeKHR presentMode = VK_PRESENT_MODE_FIFO_KHR;
-    VkPresentModeKHR presentMode = VK_PRESENT_MODE_IMMEDIATE_KHR;
+    VkPresentModeKHR presentMode = VK_PRESENT_MODE_FIFO_KHR;
+    // VkPresentModeKHR presentMode = VK_PRESENT_MODE_IMMEDIATE_KHR;
     VkExtent2D extent;
 
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(context->physical_device,
@@ -531,7 +531,7 @@ void CreateSwapchain(VulkanContext* context, MemoryArena* parent_arena) {
     context->swapchain_format = surfaceFormat.format;
     context->swapchain_extent = extent;
 
-    fprintf(stderr, "Swapchain extent: %d, %d", context->swapchain_extent.width,
+    fprintf(stderr, "Swapchain extent: %d, %d\n", context->swapchain_extent.width,
             context->swapchain_extent.height);
 }
 
@@ -1152,13 +1152,14 @@ void RendererInit(VulkanContext* context, SDL_Window* window,
 
     VkResult res = vkCreateInstance(&instance_info, 0, &context->instance);
     assert(res == VK_SUCCESS);
-
+#ifdef VKH_DEBUG
     auto vkCreateDebugUtilsMessengerEXT =
         (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(
             context->instance, "vkCreateDebugUtilsMessengerEXT");
     assert(vkCreateDebugUtilsMessengerEXT);
     vkCreateDebugUtilsMessengerEXT(context->instance, &debugCreateInfo, nullptr,
                                    &context->debug_messenger);
+#endif
 
     uint32_t device_count = 0;
     vkEnumeratePhysicalDevices(context->instance, &device_count, 0);
