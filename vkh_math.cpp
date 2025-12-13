@@ -133,12 +133,12 @@ mat4 createOrthographicProjection(float left, float right, float bottom,
     mat4 result = {};
 
     result.data[0][0] = 2.0f / (right - left);
-    result.data[1][1] = 2.0f / (top - bottom);
+    result.data[1][1] = -2.0f / (top - bottom);
     result.data[2][2] = -2.0f / (zfar - znear);
     result.data[3][3] = 1.0f;
 
     result.data[3][0] = -(right + left) / (right - left);
-    result.data[3][1] = -(top + bottom) / (top - bottom);
+    result.data[3][1] = (top + bottom) / (top - bottom);
     result.data[3][2] = -(zfar + znear) / (zfar - znear);
 
     return result;

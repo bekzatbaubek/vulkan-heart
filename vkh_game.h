@@ -38,6 +38,10 @@ struct GameInput {
 
     float mouse_x;
     float mouse_y;
+
+    float window_pixel_density;
+    int window_width;
+    int window_height;
 };
 
 struct GameMemory {

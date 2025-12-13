@@ -5,7 +5,7 @@ mkdir -p build
 glslangValidator -V shaders/heart.vert -o shaders/heart.vert.spv
 glslangValidator -V shaders/heart.frag -o shaders/heart.frag.spv
 
-COMMON_FLAGS="-I/opt/homebrew/include -L/opt/homebrew/lib -D VKH_DEBUG -g -fno-exceptions -fno-rtti --std=c++17"
+COMMON_FLAGS="-I/opt/homebrew/include -L/opt/homebrew/lib -D VKH_DEBUG -g -O0 -fno-exceptions -fno-rtti --std=c++17"
 # COMMON_FLAGS="-I/opt/homebrew/include -L/opt/homebrew/lib -g -fno-exceptions -fno-rtti --std=c++17"
 
 clang++ $COMMON_FLAGS vkh_game.cpp -shared -o ./build/vkh_game.so

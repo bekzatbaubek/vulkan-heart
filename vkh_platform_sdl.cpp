@@ -1,5 +1,3 @@
-#include "vkh_memory.h"
-#include "vkh_renderer.h"
 #ifdef _WIN64
 #include <windows.h>
 #else
@@ -9,19 +7,14 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_timer.h>
 
-#ifdef VKH_DEBUG
-#define Assert(expr) {if (!(expr)) {__builtin_debugtrap();}}
-#else
-#define Assert(expr)
-#endif
-
-#define InvalidCodePath Assert(false)
+#define InvalidCodePath assert(false)
 
 #define kilobytes(n) ((n) * 1024LL)
 #define megabytes(n) (kilobytes(n) * 1024LL)
 #define gigabytes(n) (megabytes(n) * 1024LL)
 
 #include "vkh_game.h"
+
 #include "vkh_memory.cpp"
 #include "vkh_renderer.cpp"
 
@@ -64,7 +57,7 @@ GameCode platform_load_game_code(const char* sourcePath) {
     gameCode.gameUpdateAndRender =
         (game_update_t)dlsym(gameCode.so_handle, "game_update_and_render");
 #endif
-    Assert(gameCode.gameUpdateAndRender);
+    assert(gameCode.gameUpdateAndRender);
 
     return gameCode;
 }
@@ -128,7 +121,7 @@ int main(int argc, char** argv) {
 
     SDL_Init(SDL_INIT_VIDEO);
     SDL_Window* window = SDL_CreateWindow("Vulkan Heart", window_width,
-                                          window_height, SDL_WINDOW_VULKAN);
+                                          window_height, SDL_WINDOW_VULKAN|SDL_WINDOW_HIGH_PIXEL_DENSITY);
     assert(window);
     SDL_SetWindowResizable(window, true);
 
@@ -161,8 +154,9 @@ int main(int argc, char** argv) {
     // Main event loop
     SDL_Event event;
     GameInput input = {0};
-    while (GLOBAL_running) {
+    input.window_pixel_density = SDL_GetWindowPixelDensity(window);
 
+    while (GLOBAL_running) {
         uint64_t ticks_start = SDL_GetPerformanceCounter();
         while (SDL_PollEvent(&event)) {
             handle_SDL_event(&event, &input, &context, &renderer_arena);
