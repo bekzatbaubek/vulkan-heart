@@ -57,6 +57,7 @@ struct VulkanContext {
 
     int WindowDrawableAreaWidth;
     int WindowDrawableAreaHeight;
+    float WindowPixelDensity;
     VkSurfaceKHR surface;
     VkDebugUtilsMessengerEXT debug_messenger;
 

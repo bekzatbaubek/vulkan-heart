@@ -356,6 +356,9 @@ void CreateSwapchain(VulkanContext* context, MemoryArena* parent_arena) {
     fprintf(stderr,
             "Surface capabilities: minImageCount = %d, maxImageCount = %d\n",
             capabilities.minImageCount, capabilities.maxImageCount);
+    fprintf(stderr, "Current extent: width = %d, height = %d\n",
+            capabilities.currentExtent.width, capabilities.currentExtent.height);
+
 
     uint32_t imageCount = capabilities.minImageCount;
     // assert(imageCount == 2);  // Double buffering by default
@@ -383,11 +386,6 @@ void CreateSwapchain(VulkanContext* context, MemoryArena* parent_arena) {
         for (uint32_t i = 0; i < formatCount; ++i) {
             if (formats[i].colorSpace ==
                 VK_COLOR_SPACE_DISPLAY_P3_NONLINEAR_EXT) {
-                // fprintf(stderr,"Found format: "
-                //           << string_VkFormat(formats[i].format)
-                //           << " and colorspace: "
-                //           << string_VkColorSpaceKHR(formats[i].colorSpace)
-                //           << '\n';
             }
         }
         for (uint32_t i = 0; i < formatCount; ++i) {
@@ -453,8 +451,10 @@ void CreateSwapchain(VulkanContext* context, MemoryArena* parent_arena) {
 
     extent = actualExtent;
 
-    extent.width = context->WindowDrawableAreaWidth;
-    extent.height = context->WindowDrawableAreaHeight;
+    if (capabilities.currentExtent.height == UINT32_MAX) {
+        extent.width = context->WindowDrawableAreaWidth * context->WindowPixelDensity;
+        extent.height = context->WindowDrawableAreaHeight * context->WindowPixelDensity;
+    }
 
     VkSwapchainCreateInfoKHR createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;

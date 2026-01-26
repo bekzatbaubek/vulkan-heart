@@ -1,3 +1,4 @@
+#include <cstdio>
 #ifdef _WIN64
 #include <windows.h>
 #else
@@ -97,9 +98,10 @@ void handle_SDL_event(SDL_Event* event, GameInput* input, VulkanContext* rendere
         } break;
         case SDL_EVENT_WINDOW_RESIZED: {
             // printf("Window resized: width: %d, height: %d\n", event->window.data1, event->window.data2);
-            renderer_context->WindowDrawableAreaWidth = event->window.data1;
-            renderer_context->WindowDrawableAreaHeight = event->window.data2;
-            RecreateSwapchainResources(renderer_context, renderer_arena);
+            // renderer_context->WindowDrawableAreaWidth = event->window.data1;
+            // renderer_context->WindowDrawableAreaHeight = event->window.data2;
+            // RecreateSwapchainResources(renderer_context, renderer_arena);
+            printf("SDL Event: Window resized\n");
         } break;
         case SDL_EVENT_MOUSE_MOTION: {
             // printf("Mouse moved: x: %f y: %f, xrel: %f, yrel: %f\n", event->motion.x, event->motion.y, event->motion.xrel, event->motion.yrel);
@@ -123,6 +125,8 @@ int main(int argc, char** argv) {
     SDL_Window* window = SDL_CreateWindow("Vulkan Heart", window_width,
                                           window_height, SDL_WINDOW_VULKAN|SDL_WINDOW_HIGH_PIXEL_DENSITY);
     assert(window);
+    float window_pixel_density = SDL_GetWindowPixelDensity(window);
+    printf("Window pixel density: %f\n", window_pixel_density);
     SDL_SetWindowResizable(window, true);
 
 #ifdef _WIN64
@@ -138,6 +142,7 @@ int main(int argc, char** argv) {
     VulkanContext context = {};
     context.WindowDrawableAreaWidth = window_width;
     context.WindowDrawableAreaHeight = window_height;
+    context.WindowPixelDensity = window_pixel_density;
 
     RendererInit(&context, window, &renderer_arena);
 
