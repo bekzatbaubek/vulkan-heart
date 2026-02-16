@@ -6,10 +6,6 @@
 #include <vulkan/vk_enum_string_helper.h>
 #include <vulkan/vulkan.h>
 
-#include <array>
-#include <cassert>
-#include <cstdint>
-
 #include "vkh_math.cpp"
 #include "vkh_memory.h"
 #include "vkh_renderer_abstraction.h"
@@ -194,19 +190,19 @@ void CreateGraphicsPipeline(VulkanContext* context, MemoryArena* arena) {
     VkPipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo,
                                                       fragShaderStageInfo};
 
-    std::array<VkDynamicState, 2> dynamicStates = {VK_DYNAMIC_STATE_VIEWPORT,
+    VkDynamicState dynamicStates[] = {VK_DYNAMIC_STATE_VIEWPORT,
                                                    VK_DYNAMIC_STATE_SCISSOR};
     VkPipelineDynamicStateCreateInfo dynamicState{
         .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-        .dynamicStateCount = dynamicStates.size(),
-        .pDynamicStates = dynamicStates.data(),
+        .dynamicStateCount = sizeof(dynamicStates) / sizeof(dynamicStates[0]),
+        .pDynamicStates = dynamicStates,
     };
 
     VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
     vertexInputInfo.sType =
         VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 
-    std::array<VkVertexInputBindingDescription, 2> bindingDescriptions;
+    VkVertexInputBindingDescription bindingDescriptions[2] = {};
 
     bindingDescriptions[0].binding = 0;
     bindingDescriptions[0].stride = sizeof(Vertex2D);
@@ -216,7 +212,7 @@ void CreateGraphicsPipeline(VulkanContext* context, MemoryArena* arena) {
     bindingDescriptions[1].stride = sizeof(InstanceData);
     bindingDescriptions[1].inputRate = VK_VERTEX_INPUT_RATE_INSTANCE;
 
-    std::array<VkVertexInputAttributeDescription, 6> attributeDescriptions;
+    VkVertexInputAttributeDescription attributeDescriptions[6] = {};
 
     attributeDescriptions[0].binding = 0;
     attributeDescriptions[0].location = 0;
@@ -235,11 +231,11 @@ void CreateGraphicsPipeline(VulkanContext* context, MemoryArena* arena) {
     attributeDescriptions[5].format = VK_FORMAT_R32G32B32_SFLOAT;
     attributeDescriptions[5].offset = sizeof(float) * 16;
 
-    vertexInputInfo.vertexBindingDescriptionCount = bindingDescriptions.size();
+    vertexInputInfo.vertexBindingDescriptionCount = sizeof(bindingDescriptions) / sizeof(bindingDescriptions[0]);
     vertexInputInfo.vertexAttributeDescriptionCount =
-        attributeDescriptions.size();
-    vertexInputInfo.pVertexBindingDescriptions = bindingDescriptions.data();
-    vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
+        sizeof(attributeDescriptions) / sizeof(attributeDescriptions[0]);
+    vertexInputInfo.pVertexBindingDescriptions = bindingDescriptions;
+    vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions;
 
     VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
     inputAssembly.sType =
@@ -451,7 +447,7 @@ void CreateSwapchain(VulkanContext* context, MemoryArena* parent_arena) {
 
     extent = actualExtent;
 
-    if (capabilities.currentExtent.height == UINT32_MAX) {
+    if (capabilities.currentExtent.height == UINT32_MAX || capabilities.currentExtent.width == -1 || capabilities.currentExtent.height == -1) {
         extent.width = context->WindowDrawableAreaWidth * context->WindowPixelDensity;
         extent.height = context->WindowDrawableAreaHeight * context->WindowPixelDensity;
     }
@@ -1068,7 +1064,7 @@ void RecreateSwapchainResources(VulkanContext* context, MemoryArena* arena) {
 
 void RendererInit(VulkanContext* context, SDL_Window* window,
                   MemoryArena* renderer_arena) {
-    std::array<const char*, 1> validation_layers = {
+    const char* validation_layers[] = {
         "VK_LAYER_KHRONOS_validation",
     };
 
@@ -1115,8 +1111,8 @@ void RendererInit(VulkanContext* context, SDL_Window* window,
         VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
     debugCreateInfo.pfnUserCallback = debugCallback;
 
-    instance_info.enabledLayerCount = validation_layers.size();
-    instance_info.ppEnabledLayerNames = validation_layers.data();
+    instance_info.enabledLayerCount = sizeof(validation_layers) / sizeof(const char*);
+    instance_info.ppEnabledLayerNames = validation_layers;
     instance_info.pNext = (VkDebugUtilsMessengerCreateInfoEXT*)&debugCreateInfo;
 
 #else
@@ -1298,8 +1294,8 @@ void RendererInit(VulkanContext* context, SDL_Window* window,
     };
 
 #ifdef VKH_DEBUG
-    device_info.enabledLayerCount = validation_layers.size();
-    device_info.ppEnabledLayerNames = validation_layers.data();
+    device_info.enabledLayerCount = sizeof(validation_layers) / sizeof(const char*);
+    device_info.ppEnabledLayerNames = validation_layers;
 #else
     device_info.enabledLayerCount = 0;
 #endif

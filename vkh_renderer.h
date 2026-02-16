@@ -1,7 +1,8 @@
 #pragma once
 
-#include <cstdint>
 #include <vector>
+
+#include <SDL3/SDL_stdinc.h>
 
 #include "vkh_math.h"
 #include "vulkan/vulkan_core.h"

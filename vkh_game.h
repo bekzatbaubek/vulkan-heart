@@ -1,5 +1,14 @@
 #pragma once
 
+#include <SDL3/SDL_stdinc.h>
+
+typedef float f32;
+typedef double f64;
+typedef uint32_t u32;
+typedef int32_t i32;
+typedef uint64_t u64;
+typedef int64_t i64;
+
 #include "vkh_math.h"
 #include "vkh_renderer_abstraction.h"
 
@@ -36,21 +45,21 @@ struct GameInput {
     double seconds_passed_since_last_frame;
     key_state digital_inputs[KEYS_SIZE];
 
-    float mouse_x;
-    float mouse_y;
+    f32 mouse_x;
+    f32 mouse_y;
 
-    float window_pixel_density;
-    int window_width;
-    int window_height;
+    f32 window_pixel_density;
+    i32 window_width;
+    i32 window_height;
 };
 
 struct GameMemory {
-    uint64_t permanent_store_size;
-    uint64_t permanent_store_used;
+    u64 permanent_store_size;
+    u64 permanent_store_used;
     void *permanent_store;
 
-    uint64_t transient_store_size;
-    uint64_t transient_store_used;
+    u64 transient_store_size;
+    u64 transient_store_used;
     void *transient_store;
 };
 
@@ -61,12 +70,12 @@ struct GameState {
 
     PushBuffer frame_push_buffer;
 
-    uint64_t number_of_rectangles = 0;
+    u64 number_of_rectangles = 0;
 };
 
 typedef void (*game_update_t)(GameMemory *state, GameInput *input);
 
-#ifdef _WIN64
+#ifdef SDL_PLATFORM_WINDOWS
 extern "C"
     __declspec(dllexport)
 #else

@@ -1,7 +1,6 @@
 #pragma once
 
-#include <cstddef>
-#include <cstdint>
+#include <SDL3/SDL_stdinc.h>
 
 struct MemoryArena {
     uint8_t* base;

@@ -1,6 +1,13 @@
-#include "vkh_game.h"
+#ifdef VKH_DEBUG
+#define assert(expr) \
+    if (!(expr)) { \
+        __builtin_trap();\
+    }
+#else
+#define assert(expr)
+#endif
 
-#include <cassert>
+#include "vkh_game.h"
 
 #include "vkh_memory.cpp"
 #include "vkh_renderer_abstraction.cpp"
@@ -45,32 +52,37 @@ void game_update_and_render(GameMemory *game_memory, GameInput *input) {
             input->digital_inputs[D_RIGHT].was_down = false;
         }
     }
-    // for (int iY = 0; iY < 20; iY++) {
-    //     for (int iX = 0; iX < 20; iX++) {
-    //         float x = 0.0f + (float)iX * 100.0f;
-    //         float y = 0.0f + (float)iY * 100.0f;
-    //         float width = 100.0f;
-    //         float height = 100.0f;
 
-    //         float r = (float)iX / 20.0f;
-    //         float g = (float)iY / 20.0f;
-    //         float b = 0.5f;
-
-    //         DrawRectangle(&game_state->frame_push_buffer, x, y, width, height,
-    //                       r, g, b);
-    //     }
-    // }
     {
-        float x = input->mouse_x * 2.0f;
-        float y = input->mouse_y * 2.0f;
+        for (int iY = 0; iY < 20; iY++) {
+                for (int iX = 0; iX < 20; iX++) {
+                    float x = 0.0f + (float)iX * 10.0f;
+                    float y = 0.0f + (float)iY * 10.0f;
+                    float width = 20.0f;
+                    float height = 20.0f;
+
+                    float r = (float)iX / 20.0f;
+                    float g = (float)iY / 20.0f;
+                    float b = 0.5f;
+
+                    DrawRectangle(&game_state->frame_push_buffer, x, y, width, height,
+                                  r, g, b);
+                }
+            }
+    }
+
+    {
         float width = 50.0f;
         float height = 50.0f;
-        float r = 0.2f;
-        float g = 0.3f;
-        float b = 1.0f;
+        float x = input->mouse_x * 2.0f - width / 2.0f;
+        float y = input->mouse_y * 2.0f - height / 2.0f;
+        float r = 1.0f;
+        float g = 1.0f;
+        float b = 0.0f;
         float a = 1.0f;
 
         DrawRectangle(&game_state->frame_push_buffer, x, y, width, height, r, g, b);
     }
+
 
 }

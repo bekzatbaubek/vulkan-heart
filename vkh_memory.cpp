@@ -2,7 +2,6 @@
 
 #include "vkh_memory.h"
 
-#include <cassert>
 #include <cstdlib>
 
 void arena_init(MemoryArena* arena, size_t size) {
@@ -12,7 +11,7 @@ void arena_init(MemoryArena* arena, size_t size) {
 }
 
 uint8_t* arena_push(MemoryArena* arena, size_t size) {
-    assert(arena->used + size <= arena->size);
+    // assert(arena->used + size <= arena->size);
     uint8_t* result = arena->base + arena->used;
     arena->used += size;
     return result;
