@@ -1,14 +1,14 @@
 #include "vkh_renderer.h"
+#include "vkh_memory.h"
+#include "vkh_renderer_abstraction.h"
+
+#include "vkh_math.cpp"
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
 #include <sys/stat.h>
 #include <vulkan/vk_enum_string_helper.h>
 #include <vulkan/vulkan.h>
-
-#include "vkh_math.cpp"
-#include "vkh_memory.h"
-#include "vkh_renderer_abstraction.h"
 
 #define ArrayCount(x) (sizeof(x) / sizeof((x)[0]))
 
@@ -148,8 +148,8 @@ void CreateDescriptorSetLayout(VulkanContext* context, MemoryArena* arena) {
 void CreateGraphicsPipeline(VulkanContext* context, MemoryArena* arena) {
     temp_arena tmp = begin_temp_arena(arena);
 
-    my_file vert_shader_mf = readfile("shaders/heart.vert.spv", arena);
-    my_file frag_shader_mf = readfile("shaders/heart.frag.spv", arena);
+    my_file vert_shader_mf = readfile("..\\shaders\\heart.vert.spv", arena);
+    my_file frag_shader_mf = readfile("..\\shaders\\heart.frag.spv", arena);
 
     VkShaderModule vert_shader_module;
     VkShaderModule frag_shader_module;

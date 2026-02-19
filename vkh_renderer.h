@@ -5,7 +5,7 @@
 #include <SDL3/SDL_stdinc.h>
 
 #include "vkh_math.h"
-#include "vulkan/vulkan_core.h"
+#include <vulkan/vulkan.h>
 
 struct Vertex {
     vec3 pos;

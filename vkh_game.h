@@ -1,6 +1,9 @@
 #pragma once
 
-#include <SDL3/SDL_stdinc.h>
+#include "vkh_math.h"
+#include "vkh_renderer_abstraction.h"
+
+#include <stdint.h>
 
 typedef float f32;
 typedef double f64;
@@ -8,9 +11,9 @@ typedef uint32_t u32;
 typedef int32_t i32;
 typedef uint64_t u64;
 typedef int64_t i64;
+typedef uint8_t u8;
+typedef int8_t i8;
 
-#include "vkh_math.h"
-#include "vkh_renderer_abstraction.h"
 
 struct key_state {
     bool is_down;
@@ -67,15 +70,13 @@ struct GameCamera {};
 
 struct GameState {
     bool is_initialised = false;
-
     PushBuffer frame_push_buffer;
-
     u64 number_of_rectangles = 0;
 };
 
 typedef void (*game_update_t)(GameMemory *state, GameInput *input);
 
-#ifdef SDL_PLATFORM_WINDOWS
+#ifdef _WIN64
 extern "C"
     __declspec(dllexport)
 #else

@@ -23,9 +23,19 @@ void game_update_and_render(GameMemory *game_memory, GameInput *input) {
         game_memory->permanent_store_used += sizeof(GameState);
         game_state->number_of_rectangles = 0;
 
-        arena_init(&transient_arena, game_memory->transient_store_size);
-        arena_init(&game_state->frame_push_buffer.arena,
-                   1024 * 1024 * 256);  // 256 MB Per Frame arena
+        transient_arena.base = (uint8_t*) game_memory->transient_store;
+        transient_arena.size = game_memory->transient_store_size;
+        transient_arena.used = 0;
+
+        u32 push_buffer_size = 1024 * 1024 * 256;
+        game_state->frame_push_buffer.arena.base = arena_push(&transient_arena, push_buffer_size);
+        game_state->frame_push_buffer.arena.used = 0;
+        game_state->frame_push_buffer.arena.size = push_buffer_size;
+
+
+        // arena_init(&transient_arena, game_memory->transient_store_size);
+        // arena_init(&game_state->frame_push_buffer.arena,
+        //            1024 * 1024 * 256);  // 256 MB Per Frame arena
 
     } else {
         transient_arena.base = (uint8_t *)game_memory->transient_store;
@@ -74,9 +84,9 @@ void game_update_and_render(GameMemory *game_memory, GameInput *input) {
     {
         float width = 50.0f;
         float height = 50.0f;
-        float x = input->mouse_x * 2.0f - width / 2.0f;
-        float y = input->mouse_y * 2.0f - height / 2.0f;
-        float r = 1.0f;
+        float x = input->mouse_x * input->window_pixel_density - width / 2.0f;
+        float y = input->mouse_y * input->window_pixel_density - height / 2.0f;
+        float r = 0.0f;
         float g = 1.0f;
         float b = 0.0f;
         float a = 1.0f;

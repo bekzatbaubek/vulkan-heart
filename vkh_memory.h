@@ -1,6 +1,6 @@
 #pragma once
 
-#include <SDL3/SDL_stdinc.h>
+#include <stdint.h>
 
 struct MemoryArena {
     uint8_t* base;
@@ -13,7 +13,6 @@ struct temp_arena {
     size_t prev_used;
 };
 
-void arena_init(MemoryArena* arena, size_t size);
 uint8_t* arena_push(MemoryArena* arena, size_t size);
 temp_arena begin_temp_arena(MemoryArena* arena);
 void end_temp_arena(temp_arena* temp);

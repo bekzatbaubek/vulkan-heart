@@ -13,6 +13,7 @@
 #define assert(expr)
 #endif
 
+
 #include "vkh_memory.cpp"
 #include "vkh_renderer.cpp"
 
@@ -134,7 +135,9 @@ int main(int argc, char** argv) {
     platform_load_game_code(&gameCode);
 
     MemoryArena renderer_arena = {};
-    arena_init(&renderer_arena, megabytes(128));
+    renderer_arena.base = (uint8_t*)malloc(megabytes(128));
+    renderer_arena.size = megabytes(128);
+    renderer_arena.used = 0;
 
     VulkanContext context = {};
     context.WindowDrawableAreaWidth = window_width;

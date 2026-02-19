@@ -1,14 +1,4 @@
-#pragma once
-
 #include "vkh_memory.h"
-
-#include <cstdlib>
-
-void arena_init(MemoryArena* arena, size_t size) {
-    arena->base = (uint8_t*)malloc(size);
-    arena->size = size;
-    arena->used = 0;
-}
 
 uint8_t* arena_push(MemoryArena* arena, size_t size) {
     // assert(arena->used + size <= arena->size);

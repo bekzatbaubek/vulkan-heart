@@ -6,7 +6,7 @@ CompileFlags:
       --std=c++17,
       -Wall,
       -Ivendor/include,
-      -IC:/VulkanSDK/1.4.321.1/Include,
+      -IC:/VulkanSDK/1.4.341.1/Include,
       -I/opt/homebrew/include,
       -Wno-unused-parameter,
       -Wno-unused-variable,
