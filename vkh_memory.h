@@ -2,6 +2,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stddef.h>
 
 struct MemoryArena {
     uint8_t* base;

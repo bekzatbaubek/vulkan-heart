@@ -41,6 +41,9 @@ void game_update_and_render(GameMemory *game_memory, GameInput *input) {
         transient_arena.base = (uint8_t *)game_memory->transient_store;
         transient_arena.size = game_memory->transient_store_size;
         transient_arena.used = game_memory->transient_store_used;
+
+        u32 push_buffer_size = 1024 * 1024 * 256;
+        game_state->frame_push_buffer.arena.base = arena_push(&transient_arena, push_buffer_size);
         game_state->frame_push_buffer.arena.used = 0;
         game_state->frame_push_buffer.number_of_entries = 0;
     }
@@ -64,12 +67,12 @@ void game_update_and_render(GameMemory *game_memory, GameInput *input) {
     }
 
     {
-        for (int iY = 0; iY < 20; iY++) {
-                for (int iX = 0; iX < 20; iX++) {
-                    float x = 0.0f + (float)iX * 10.0f;
-                    float y = 0.0f + (float)iY * 10.0f;
-                    float width = 20.0f;
-                    float height = 20.0f;
+        for (int iY = 0; iY < 200; iY++) {
+                for (int iX = 0; iX < 2000; iX++) {
+                    float width = 90.0f;
+                    float height = 90.0f;
+                    float x = 0.0f + (float)iX * width;
+                    float y = 0.0f + (float)iY * height;
 
                     float r = (float)iX / 20.0f;
                     float g = (float)iY / 20.0f;

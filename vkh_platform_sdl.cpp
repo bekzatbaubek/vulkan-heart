@@ -15,6 +15,7 @@
 #define assert(expr)
 #endif
 
+#define ArrayCount(x) (sizeof(x) / sizeof((x)[0]))
 
 #include "vkh_memory.cpp"
 #include "vkh_renderer.cpp"
@@ -135,6 +136,7 @@ int main(int argc, char** argv) {
     float window_pixel_density = SDL_GetWindowDisplayScale(window);
     printf("Window pixel density: %f\n", window_pixel_density);
     SDL_SetWindowResizable(window, true);
+    SDL_SetWindowFullscreen(window, GLOBAL_fullscreen);
 
     GameCode gameCode;
     SDL_PathInfo info;
