@@ -148,8 +148,16 @@ void CreateDescriptorSetLayout(VulkanContext* context, MemoryArena* arena) {
 void CreateGraphicsPipeline(VulkanContext* context, MemoryArena* arena) {
     temp_arena tmp = begin_temp_arena(arena);
 
-    my_file vert_shader_mf = readfile("..\\shaders\\heart.vert.spv", arena);
-    my_file frag_shader_mf = readfile("..\\shaders\\heart.frag.spv", arena);
+#if SDL_PLATFORM_WINDOWS
+    const char* vert_shader_path = "..\\shaders\\heart.vert.spv";
+    const char* frag_shader_path = "..\\shaders\\heart.frag.spv";
+#else
+    const char* vert_shader_path = "./shaders/heart.vert.spv";
+    const char* frag_shader_path = "./shaders/heart.frag.spv";
+#endif
+
+    my_file vert_shader_mf = readfile(vert_shader_path, arena);
+    my_file frag_shader_mf = readfile(frag_shader_path, arena);
 
     VkShaderModule vert_shader_module;
     VkShaderModule frag_shader_module;
