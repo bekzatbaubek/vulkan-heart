@@ -1,4 +1,7 @@
 #include "vkh_renderer.h"
+#include "SDL3/SDL_filesystem.h"
+#include "SDL3/SDL_iostream.h"
+#include "SDL3/SDL_stdinc.h"
 #include "vkh_memory.h"
 #include "vkh_renderer_abstraction.h"
 
@@ -95,35 +98,18 @@ struct my_file {
 };
 
 my_file readfile(const char* path, MemoryArena* arena) {
-#ifdef _WIN64
-    FILE* f;
-    fopen_s(&f, path, "rb");
-#else
-    FILE* f = fopen(path, "rb");
-#endif
-    my_file mf = {0, 0};
+    my_file mf;
 
-    struct stat attr;
-    int result = stat(path, &attr);
-    if (result == 0) {
-        uint32_t file_size = attr.st_size;
-        uint32_t padding = 0;
+    size_t file_size;
+    void * file = SDL_LoadFile(path, &file_size);
+    char* file_in_mem =
+        (char*)arena_push(arena, file_size);
 
-        if (file_size % 4 != 0) {
-            fprintf(stderr, "File size is not a multiple of 4\n");
-            padding = 4 - (file_size % 4);
-        }
+    SDL_memcpy(file_in_mem, file, file_size);
+    SDL_free(file);
 
-        char* file_in_mem =
-            (char*)arena_push(arena, sizeof(char) * file_size + padding);
-
-        size_t ret_code = fread(file_in_mem, sizeof(char), file_size, f);
-        assert(ret_code == file_size);
-
-        mf.size = file_size + padding;
-        mf.mem = file_in_mem;
-    }
-    fclose(f);
+    mf.size = file_size;
+    mf.mem = file_in_mem;
 
     return mf;
 }
@@ -149,8 +135,8 @@ void CreateGraphicsPipeline(VulkanContext* context, MemoryArena* arena) {
     temp_arena tmp = begin_temp_arena(arena);
 
 #if SDL_PLATFORM_WINDOWS
-    const char* vert_shader_path = "..\\shaders\\heart.vert.spv";
-    const char* frag_shader_path = "..\\shaders\\heart.frag.spv";
+    const char* vert_shader_path = ".\\shaders\\heart.vert.spv";
+    const char* frag_shader_path = ".\\shaders\\heart.frag.spv";
 #else
     const char* vert_shader_path = "./shaders/heart.vert.spv";
     const char* frag_shader_path = "./shaders/heart.frag.spv";

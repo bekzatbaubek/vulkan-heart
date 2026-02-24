@@ -1,3 +1,5 @@
+#include "SDL3/SDL_events.h"
+#include "SDL3/SDL_video.h"
 #define kilobytes(n) ((n) * 1024LL)
 #define megabytes(n) (kilobytes(n) * 1024LL)
 #define gigabytes(n) (megabytes(n) * 1024LL)
@@ -24,6 +26,7 @@
 #include <SDL3/SDL_stdinc.h>
 
 bool GLOBAL_running = true;
+bool GLOBAL_fullscreen = false;
 
 struct GameCode {
 #if SDL_PLATFORM_WINDOWS
@@ -86,6 +89,11 @@ void handle_SDL_event(SDL_Event* event, GameInput* input,
                 case SDL_SCANCODE_D: {
                     input->digital_inputs[D_RIGHT].is_down = true;
                 } break;
+                case SDL_SCANCODE_F11: {
+                    GLOBAL_fullscreen = !GLOBAL_fullscreen;
+                    SDL_Window *window = SDL_GetWindowFromEvent(event);
+                    SDL_SetWindowFullscreen(window, GLOBAL_fullscreen);
+                }
                 default: {
                 }
             }
@@ -124,7 +132,7 @@ int main(int argc, char** argv) {
         SDL_CreateWindow("Vulkan Heart", window_width, window_height,
                          SDL_WINDOW_VULKAN | SDL_WINDOW_HIGH_PIXEL_DENSITY);
     assert(window);
-    float window_pixel_density = SDL_GetWindowPixelDensity(window);
+    float window_pixel_density = SDL_GetWindowDisplayScale(window);
     printf("Window pixel density: %f\n", window_pixel_density);
     SDL_SetWindowResizable(window, true);
 
