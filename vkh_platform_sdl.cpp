@@ -1,5 +1,3 @@
-#include "SDL3/SDL_events.h"
-#include "SDL3/SDL_video.h"
 #define kilobytes(n) ((n) * 1024LL)
 #define megabytes(n) (kilobytes(n) * 1024LL)
 #define gigabytes(n) (megabytes(n) * 1024LL)
@@ -7,8 +5,10 @@
 #include "vkh_game.h"
 
 #ifdef VKH_DEBUG
+#include <stdio.h>
 #define assert(expr) \
     if (!(expr)) { \
+        fprintf(stderr, "Assertion failed: %s, at %s:%d\n", #expr, __FILE__, __LINE__); \
         __builtin_trap();\
     }
 #else
@@ -21,18 +21,21 @@
 #include "vkh_renderer.cpp"
 
 #include <SDL3/SDL.h>
+#include "SDL3/SDL_init.h"
 #include <SDL3/SDL_loadso.h>
 #include <SDL3/SDL_timer.h>
 #include <SDL3/SDL_filesystem.h>
 #include <SDL3/SDL_stdinc.h>
+#include "SDL3/SDL_events.h"
+#include "SDL3/SDL_video.h"
 
 bool GLOBAL_running = true;
 bool GLOBAL_fullscreen = false;
 
 struct GameCode {
 #if SDL_PLATFORM_WINDOWS
-    const char* sourcePath = "vkh_game.dll";
-    const char *newpath = "gamecopy.dll";
+    const char* sourcePath = ".\\build\\vkh_game.dll";
+    const char *newpath = ".\\build\\gamecopy.dll";
 #else
     const char *sourcePath = "./build/vkh_game.so";
     const char *newpath = "./build/game_copy.so";
@@ -47,6 +50,11 @@ void platform_free_game_code(GameCode* gameCode) {
 }
 
 void platform_load_game_code(GameCode* gc) {
+    SDL_PathInfo info;
+    SDL_GetPathInfo(gc->sourcePath, &info);
+
+    gc->lastModified = info.modify_time;
+
     SDL_CopyFile(gc->sourcePath, gc->newpath);
     gc->so_handle = SDL_LoadObject(gc->newpath);
     assert(gc->so_handle);
@@ -57,15 +65,18 @@ void platform_load_game_code(GameCode* gc) {
 }
 
 void platform_reload_game_code(GameCode* gameCode) {
-
     SDL_PathInfo info;
     SDL_GetPathInfo(gameCode->sourcePath, &info);
-
     if (info.modify_time > gameCode->lastModified) {
-        gameCode->lastModified = info.modify_time;
         platform_free_game_code(gameCode);
         platform_load_game_code(gameCode);
         fprintf(stderr, "Game code reloaded\n");
+    }
+}
+
+void ResetInputKeys(GameInput* input){
+    for (u32 i = 0; i < KEYS_SIZE; i++){
+        input->digital_inputs[i].is_down = false;
     }
 }
 
@@ -105,6 +116,8 @@ void handle_SDL_event(SDL_Event* event, GameInput* input,
             renderer_context->WindowDrawableAreaWidth = event->window.data1;
             renderer_context->WindowDrawableAreaHeight = event->window.data2;
             RecreateSwapchainResources(renderer_context, renderer_arena);
+            input->window_width = event->window.data1;
+            input->window_height = event->window.data2;
         } break;
         case SDL_EVENT_MOUSE_MOTION: {
             // printf("Mouse moved: x: %f y: %f, xrel: %f, yrel: %f\n",
@@ -123,6 +136,8 @@ void handle_SDL_event(SDL_Event* event, GameInput* input,
         } break;
     }
 }
+
+
 
 int main(int argc, char** argv) {
     int window_width = 800;
@@ -170,9 +185,14 @@ int main(int argc, char** argv) {
     SDL_Event event;
     GameInput input = {0};
     input.window_pixel_density = SDL_GetWindowPixelDensity(window);
+    input.window_height = window_height;
+    input.window_width = window_width;
 
     while (GLOBAL_running) {
         uint64_t ticks_start = SDL_GetPerformanceCounter();
+
+        ResetInputKeys(&input);
+
         while (SDL_PollEvent(&event)) {
             handle_SDL_event(&event, &input, &context, &renderer_arena);
         }
@@ -186,5 +206,13 @@ int main(int argc, char** argv) {
 
         uint64_t ticks_end = SDL_GetPerformanceCounter();
         uint64_t elapsed_ticks = ticks_end - ticks_start;
+
+        f32 fps = (f32)timer_frequency / elapsed_ticks;
+
+        char buffer[256];
+        sprintf(buffer, "FPS: %f.2", fps);
+        SDL_SetWindowTitle(window, buffer);
     }
+
+    SDL_Quit();
 }

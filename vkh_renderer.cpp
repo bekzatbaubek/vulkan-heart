@@ -1,5 +1,4 @@
 #include "vkh_renderer.h"
-#include "SDL3/SDL_filesystem.h"
 #include "SDL3/SDL_iostream.h"
 #include "SDL3/SDL_stdinc.h"
 #include "vkh_memory.h"

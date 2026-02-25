@@ -1,6 +1,8 @@
 #ifdef VKH_DEBUG
+#include <stdio.h>
 #define assert(expr) \
     if (!(expr)) { \
+        fprintf(stderr, "Assertion failed: %s, at %s:%d\n", #expr, __FILE__, __LINE__); \
         __builtin_trap();\
     }
 #else
@@ -33,32 +35,44 @@ void game_update_and_render(GameMemory *game_memory, GameInput *input) {
     game_state->frame_push_buffer.arena.used = 0;
 
     if (input->digital_inputs[D_LEFT].is_down) {
-        input->digital_inputs[D_LEFT].was_down = true;
-
-    } else {
-        if (input->digital_inputs[D_LEFT].was_down) {
-            input->digital_inputs[D_LEFT].was_down = false;
+        if (game_state->number_of_rectangles > 0) {
+            game_state->number_of_rectangles--;
         }
     }
 
     if (input->digital_inputs[D_RIGHT].is_down) {
-        input->digital_inputs[D_RIGHT].was_down = true;
-
-    } else {
-        if (input->digital_inputs[D_RIGHT].was_down) {
-            input->digital_inputs[D_RIGHT].was_down = false;
+        if (game_state->number_of_rectangles < 2000) {
+            game_state->number_of_rectangles++;
         }
     }
 
     {
-        float width = 50.0f;
-        float height = 50.0f;
-        // float x = input->mouse_x * input->window_pixel_density - width / 2.0f;
-        // float y = input->mouse_y * input->window_pixel_density - height / 2.0f;
-        float x = 200.0f;
-        float y = 200.0f;
-        float r = 0.0f;
-        float g = 1.0f;
+        u32 stride = input->window_width / 50;
+
+        for (u32 i = 0; i < game_state->number_of_rectangles; i++){
+
+            float width = 50.0f;
+            float height = 50.0f;
+            float x = (f32) ((i % stride) * width);
+            float y = (f32) ((i / stride) * height);
+            float r = 0.0f;
+            float g = 1.0f * (i % 2);
+            float b = 1.0f * (1.0f - (i % 2));
+            float a = 1.0f;
+
+            DrawRectangle(&game_state->frame_push_buffer, x, y, width, height, r, g, b);
+
+        }
+
+    }
+
+    {
+        float width = 200.0f;
+        float height = 200.0f;
+        float x = input->mouse_x * input->window_pixel_density - width / 2.0f;
+        float y = input->mouse_y * input->window_pixel_density - height / 2.0f;
+        float r = 1.0f;
+        float g = 0.0f;
         float b = 0.0f;
         float a = 1.0f;
 
