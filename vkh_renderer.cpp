@@ -135,20 +135,15 @@ void CreateGraphicsPipeline(VulkanContext* context, MemoryArena* arena) {
     temp_arena tmp = begin_temp_arena(arena);
 
 #if SDL_PLATFORM_WINDOWS
-<<<<<<< HEAD
     const char* vert_shader_path = ".\\shaders\\heart.vert.spv";
     const char* frag_shader_path = ".\\shaders\\heart.frag.spv";
-=======
-    const char *vert_shader_path = "..\\shaders\\heart.vert.spv";
-    const char *frag_shader_path = "..\\shaders\\heart.frag.spv";
->>>>>>> 04d43d2 (linux build fix)
 #else
     const char *vert_shader_path = "./shaders/heart.vert.spv";
     const char *frag_shader_path = "./shaders/heart.frag.spv";
 #endif
 
-    my_file vert_shader_mf = PlatformReadEntireFile(vert_shader_path, arena);
-    my_file frag_shader_mf = PlatformReadEntireFile(frag_shader_path, arena);
+    my_file vert_shader_mf = readfile(vert_shader_path, arena);
+    my_file frag_shader_mf = readfile(frag_shader_path, arena);
 
     VkShaderModule vert_shader_module;
     VkShaderModule frag_shader_module;
@@ -1376,7 +1371,7 @@ void UploadPushBufferContentsToGPU(VulkanContext* context, PushBuffer* pb,
 
     for (size_t i = 0; i < number_of_entries; i++) {
         PushBufferEntry* pbe =
-            (PushBufferEntry*)(pb->arena.base + sizeof(PushBufferEntry));
+            (PushBufferEntry*)(pb->arena.base + i * sizeof(PushBufferEntry));
 
         if (pbe->type == QUAD) {
             if (i == 0) {

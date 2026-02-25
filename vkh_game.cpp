@@ -33,6 +33,7 @@ void game_update_and_render(GameMemory *game_memory, GameInput *input) {
     game_state->frame_push_buffer.arena.base = arena_push(&transient_arena, push_buffer_size);
     game_state->frame_push_buffer.arena.size = push_buffer_size;
     game_state->frame_push_buffer.arena.used = 0;
+    game_state->frame_push_buffer.number_of_entries = 0;
 
     if (input->digital_inputs[D_LEFT].is_down) {
         if (game_state->number_of_rectangles > 0) {
