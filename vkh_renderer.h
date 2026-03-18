@@ -74,7 +74,7 @@ struct VulkanContext {
 
     // Note: double buffer by default
     // One image presented and the other is being rendered to
-    uint32_t MAX_FRAMES_IN_FLIGHT = 2;
+    uint32_t MAX_FRAMES_IN_FLIGHT = 3;
 
     VkSemaphore* image_acquire_semaphore;
     VkSemaphore* render_finished_semaphore;

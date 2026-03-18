@@ -351,12 +351,11 @@ void CreateSwapchain(VulkanContext* context, MemoryArena* parent_arena) {
 
 
     uint32_t imageCount = capabilities.minImageCount;
-    // assert(imageCount == 2);  // Double buffering by default
+    uint32_t maxImageCount = capabilities.maxImageCount;
 
-    // if (capabilities.maxImageCount > 0 &&
-    //     imageCount > capabilities.maxImageCount) {
-    //     imageCount = capabilities.maxImageCount;
-    // }
+    if (capabilities.minImageCount >= 2 && capabilities.maxImageCount >= 3) {
+        imageCount = 3;
+    }
 
     fprintf(stderr, "Engine Image Count: %d\n", imageCount);
 
@@ -691,7 +690,9 @@ void CreateVertexBuffer(VulkanContext* context) {
 }
 
 void CreateUniformBuffers(VulkanContext* context, MemoryArena* arena) {
-    VkDeviceSize bufferSize = sizeof(UniformBufferObject);
+
+    const VkDeviceSize uniform_buffer_capacity = megabytes(256);
+    VkDeviceSize bufferSize = uniform_buffer_capacity;
 
     context->uniform_buffers = (VkBuffer*)arena_push(
         arena, sizeof(VkBuffer) * context->MAX_FRAMES_IN_FLIGHT);
