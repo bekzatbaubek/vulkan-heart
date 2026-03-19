@@ -1,10 +1,6 @@
 #pragma once
 
-#include "vkh_math.h"
-#include "vkh_renderer_abstraction.h"
-
 #include <stdint.h>
-
 typedef float f32;
 typedef double f64;
 typedef uint32_t u32;
@@ -14,11 +10,13 @@ typedef int64_t i64;
 typedef uint8_t u8;
 typedef int8_t i8;
 
+#include "vkh_math.h"
+#include "vkh_renderer_abstraction.h"
 
 struct key_state {
     bool is_down;
     bool was_down;
-    uint32_t num_of_presses;
+    u32 num_of_presses;
 };
 
 enum key {
@@ -68,10 +66,18 @@ struct GameMemory {
 
 struct GameCamera {};
 
+struct Particles {
+    u32 num_of_particles;
+    vec2* positions;
+    vec2* velocities;
+    vec3* colors;
+};
+
 struct GameState {
     bool is_initialised = false;
     PushBuffer frame_push_buffer;
     u64 number_of_rectangles = 0;
+    Particles particles;
 };
 
 typedef void (*game_update_t)(GameMemory *state, GameInput *input);

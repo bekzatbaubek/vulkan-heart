@@ -28,6 +28,12 @@ inline vec3 operator+(const vec3 &a, const vec3 &b) {
     return {a.x + b.x, a.y + b.y, a.z + b.z};
 }
 
+inline vec2 &operator+=(vec2 &a, const vec2 &b) {
+    a.x += b.x;
+    a.y += b.y;
+    return a;
+}
+
 inline vec3 operator-(const vec3 &a, const vec3 &b) {
     return {a.x - b.x, a.y - b.y, a.z - b.z};
 };

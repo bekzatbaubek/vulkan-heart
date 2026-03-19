@@ -129,10 +129,12 @@ void handle_SDL_event(SDL_Event* event, GameInput* input,
         case SDL_EVENT_MOUSE_BUTTON_DOWN: {
             // printf("Mouse button down: button: %d, x: %f, y: %f\n",
             // event->button.button, event->button.x, event->button.y);
+            input->digital_inputs[KEY_A].is_down = true;
         } break;
         case SDL_EVENT_MOUSE_BUTTON_UP: {
             // printf("Mouse button up: button: %d, x: %f, y: %f\n",
             // event->button.button, event->button.x, event->button.y);
+            input->digital_inputs[KEY_A].is_down = false;
         } break;
     }
 }
@@ -148,6 +150,20 @@ int main(int argc, char** argv) {
         SDL_CreateWindow("Vulkan Heart", window_width, window_height,
                          SDL_WINDOW_VULKAN | SDL_WINDOW_HIGH_PIXEL_DENSITY);
     assert(window);
+
+    SDL_DisplayID display_id = SDL_GetDisplayForWindow(window);
+
+    float display_refresh_rate = 60;
+
+    int count = 0;
+    SDL_DisplayMode** display_modes = SDL_GetFullscreenDisplayModes(display_id, &count);
+
+    for (int i = 0; i < count; i++) {
+        SDL_DisplayMode *mode =  display_modes[i];
+        display_refresh_rate = mode->refresh_rate;
+        break;
+    }
+
     float window_pixel_density = SDL_GetWindowDisplayScale(window);
     printf("Window pixel density: %f\n", window_pixel_density);
     SDL_SetWindowResizable(window, true);
@@ -181,6 +197,9 @@ int main(int argc, char** argv) {
     uint64_t timer_frequency =
         SDL_GetPerformanceFrequency();  // counts per second
 
+    const f32 TARGET_FRAMERATE = display_refresh_rate;
+    const f32 TARGET_FRAME_TIME = 1.0f / TARGET_FRAMERATE;
+
     // Main event loop
     SDL_Event event;
     GameInput input = {0};
@@ -192,6 +211,7 @@ int main(int argc, char** argv) {
         uint64_t ticks_start = SDL_GetPerformanceCounter();
 
         ResetInputKeys(&input);
+        input.seconds_passed_since_last_frame = TARGET_FRAME_TIME * 1000.0f;
 
         while (SDL_PollEvent(&event)) {
             handle_SDL_event(&event, &input, &context, &renderer_arena);
@@ -207,8 +227,19 @@ int main(int argc, char** argv) {
         uint64_t ticks_end = SDL_GetPerformanceCounter();
         uint64_t elapsed_ticks = ticks_end - ticks_start;
 
-        f32 fps = (f32)timer_frequency / elapsed_ticks;
+        f32 seconds_elapsed = (f32)elapsed_ticks / timer_frequency;
+        if (seconds_elapsed < TARGET_FRAME_TIME) {
+            // printf("Warning: Frame took too short to render (%f s)\n", seconds_elapsed);
+            ticks_end = SDL_GetPerformanceCounter();
+            elapsed_ticks = ticks_end - ticks_start;
+            seconds_elapsed = (f32)elapsed_ticks / timer_frequency;
+            SDL_DelayPrecise((TARGET_FRAME_TIME - seconds_elapsed)*1000000000.0f);
+        }
 
+        ticks_end = SDL_GetPerformanceCounter();
+        elapsed_ticks = ticks_end - ticks_start;
+
+        f32 fps = (f32)timer_frequency / elapsed_ticks;
         char buffer[256];
         sprintf(buffer, "FPS: %f.2", fps);
         SDL_SetWindowTitle(window, buffer);

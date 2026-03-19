@@ -11,5 +11,5 @@ typedef vec3 pos3;
 typedef vec3 color3;
 
 struct mat4 {
-    float data[4][4] = {{0}};
+    float data[4][4];
 };
