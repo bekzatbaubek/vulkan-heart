@@ -87,7 +87,7 @@ void game_update_and_render(GameMemory *game_memory, GameInput *input) {
         }
     }
 
-#if 0
+if (1) {
     if (input->digital_inputs[KEY_A].is_down) {
         SpawnParticles(game_state, {input->mouse_x, input->mouse_y}, input->window_pixel_density);
     }
@@ -104,10 +104,10 @@ void game_update_and_render(GameMemory *game_memory, GameInput *input) {
 
         DrawRectangle(&game_state->frame_push_buffer, x, y, width, height, r, g, b);
     }
-#endif
+}
 
     {
-        u32 stride = input->window_width / 50;
+        u32 stride = (input->window_width * input->window_pixel_density) / 50;
 
         for (u32 i = 0; i < game_state->number_of_rectangles; i++){
 

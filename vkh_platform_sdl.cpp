@@ -110,6 +110,24 @@ void handle_SDL_event(SDL_Event* event, GameInput* input,
                 }
             }
         } break;
+        case SDL_EVENT_KEY_UP: {
+            switch (event->key.scancode) {
+                case SDL_SCANCODE_W: {
+                    input->digital_inputs[D_UP].is_down = false;
+                } break;
+                case SDL_SCANCODE_S: {
+                    input->digital_inputs[D_DOWN].is_down = false;
+                } break;
+                case SDL_SCANCODE_A: {
+                    input->digital_inputs[D_LEFT].is_down = false;
+                } break;
+                case SDL_SCANCODE_D: {
+                    input->digital_inputs[D_RIGHT].is_down = false;
+                } break;
+                default: {
+                }
+            }
+        } break;
         case SDL_EVENT_WINDOW_RESIZED: {
             printf("Window resized: width: %d, height: %d\n",
                    event->window.data1, event->window.data2);
@@ -210,7 +228,6 @@ int main(int argc, char** argv) {
     while (GLOBAL_running) {
         uint64_t ticks_start = SDL_GetPerformanceCounter();
 
-        ResetInputKeys(&input);
         input.seconds_passed_since_last_frame = TARGET_FRAME_TIME * 1000.0f;
 
         while (SDL_PollEvent(&event)) {
